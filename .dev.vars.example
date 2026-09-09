@@ -1,0 +1,8 @@
+# Copy to .dev.vars. Server-only configuration; never commit real values.
+ANTHROPIC_API_KEY=
+AI_MODEL=
+MAX_AI_RUNS_PER_DAY=30
+LANGSMITH_TRACING=false
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=consultiq
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com

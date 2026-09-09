@@ -1,51 +1,47 @@
-# ConsultIQ dashboard
+# ConsultIQ
 
-A consultation review workspace built from the ConsultIQ project scope. The original planning and owner-authored documents remain in the parent directory.
+ConsultIQ is a consultation review and coaching workspace for dental training teams. Reviewers can import a role-play transcript, assess it against an approved rubric, inspect supporting quotes, and record a revised human assessment. Coaching can retrieve approved training material and generate an answer with source citations.
 
-## Run locally
+The repository contains a premium product landing page and a persistent application. The original static interface has been replaced with database-backed workflows. This release is a private pilot foundation, with commercial release work explicitly tracked in [the product plan](docs/PRODUCT_PLAN.md).
+
+## Start locally
+
+Use Node matching `.nvmrc` and npm.
 
 ```sh
 npm ci
+npm run db:migrate
 npm run dev
 ```
 
-Open the local address printed by the development server.
+Open the local URL printed by the server. The landing page is at `/`; the application is at `/workspace`. Use the local Sites sign-in flow to enter a private workspace. Model credentials are optional for manual review and library search.
 
-## Included
-
-- Overview with summaries calculated from the selected demo consultations.
-- Searchable consultation list with coordinator and outcome filters, plus CSV export.
-- Call reports with illustrative rubric assessments and linked transcript excerpts.
-- Coordinator comparisons and descriptive outcome patterns.
-- Pasted transcript and plain-text file import, including speaker-label validation.
-
-## Data and integration status
-
-The bundled consultations, scores, and acceptance estimates are authored demo examples. No model has been trained or evaluated. Source excerpts illustrate evidence navigation; they do not validate the correctness of a rubric score. Outcome comparisons are descriptive and do not establish causation or statistical significance.
-
-Imports exist only in the active page session and disappear on refresh. They remain unscored. CSV export contains consultation metadata, not transcript content. Speaker swapping changes the current review display only and does not recalculate demo scores.
-
-Audio transcription, persistent storage, rubric judging, validated judge evidence, and calibrated prediction are not connected. The final rubric anchors and judge prompts remain owner-authored. The Python pipeline described in the parent documents has not been implemented by this dashboard slice.
-
-The frontend uses React and Vinext for the web experience while leaving the planned Python analysis pipeline as a future integration boundary. This starts the web application requested in the current task rather than implementing the previously proposed Streamlit interface.
-
-## Validation
+For AI configuration, copy `.dev.vars.example` to `.dev.vars`, fill in server-side credentials, and restart the server. Never commit that file. See [operations](docs/OPERATIONS.md) before enabling external services.
 
 ```sh
-npm test
-npm run typecheck
-npm run lint
-npm run build
+npm run check
 ```
 
-Tests cover transcript parsing and rejection, summary denominators, unscored imports, composed filters, CSV escaping, and demo fixture integrity. Lint excludes the unchanged scaffold component catalog and its mobile hook; TypeScript still checks them. No browser interaction or screenshot testing was requested.
+This runs automated tests, TypeScript, lint, and the production build. Generate new database migrations with `npm run db:generate`, then apply them locally with `npm run db:migrate`.
 
-An optional feature-detected WebMCP tool opens a demo consultation through the same review state as the interface. The preview browser did not expose a supported WebMCP context, so its runtime contract has not been verified.
+## What is included
 
-## Dependencies
+- A responsive landing page and application using shadcn/Base UI components.
+- Private per-user workspaces, saved transcripts, recorded outcomes, filtering, and CSV export.
+- Owner-approved rubric versions and append-only assessment revisions.
+- Quote validation against the cited transcript turn; unsupported scores remain unscored.
+- Optional server-side Claude analysis, tracked analysis jobs, and daily request limits.
+- Approved document ingestion, keyword retrieval, and citation-validated RAG coaching.
+- Optional LangSmith run tracing with inputs and outputs excluded.
 
-The Sites scaffold supplies React and Vinext for rendering, Base UI and Shadcn for accessible controls, Lucide for icons, Tailwind and CSS utilities for styling, and the Sites and Cloudflare tooling for preview and hosting. The scaffold dependency catalog and lockfile are retained. The application adds no packages beyond the scaffold. Tests use the built-in Node test runner.
+There are no seeded customer records, fabricated performance metrics, or acceptance predictions. AI controls remain unavailable until configured. Real patient recordings, team invitations, billing, semantic vector retrieval, and model-quality evaluations are not implemented.
 
-## Hosting
+## Project documentation
 
-The hosted application is a static export. Server rendering and analysis services are not deployed. The scaffold currently reports dependency audit advisories, including server and development tooling; review and update these dependencies before introducing a production backend.
+- [Your actions and decisions](docs/OWNER_ACTIONS.md)
+- [Product direction and release gates](docs/PRODUCT_PLAN.md)
+- [Implementation and architecture](docs/IMPLEMENTATION.md)
+- [Setup, operation, and deployment](docs/OPERATIONS.md)
+- [Validation and known limits](docs/VALIDATION.md)
+
+The original planning documents remain at the repository root as historical design inputs. They describe Python, training, and predictive-model work that is not present in this implementation. The current implementation and outstanding work are documented above.

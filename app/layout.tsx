@@ -6,7 +6,7 @@ const mono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'ConsultIQ | Consultation intelligence',
   description:
-    'An evidence-led workspace to review consultations, understand conversations, and coach your team. Interactive demo.',
+    'An evidence-led workspace to review consultations, understand conversations, and coach your team.',
 };
 export default function RootLayout({
   children,

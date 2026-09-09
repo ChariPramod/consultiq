@@ -1,737 +1,401 @@
-'use client';
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
-  CallReview,
-  CoordinatorView,
-  PatternView,
-  RubricGuide,
-} from './review';
-import { ImportDialog } from './import-dialog';
-import { flushSync } from 'react-dom';
-import {
-  Activity,
-  ArrowDownToLine,
+  ArrowDown,
   ArrowRight,
-  ArrowUpRight,
   AudioLines,
-  BarChart3,
   BookOpen,
-  CalendarDays,
-  ChevronDown,
+  Check,
+  CheckCheck,
   ChevronRight,
-  LayoutDashboard,
-  Lightbulb,
-  Plus,
-  Search,
+  ClipboardCheck,
+  FileText,
+  Layers3,
+  LockKeyhole,
+  MessageSquareText,
+  Quote,
+  ScanText,
   ShieldCheck,
-  Sparkles,
-  Target,
-  Users,
 } from 'lucide-react';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
-} from '@/components/ui/sidebar';
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from '@/components/ui/native-select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  demoCalls,
-  coordinators,
-  averageScore,
-  summarize,
-  filterCalls,
-  csvExport,
-  type Consultation,
-} from '@/lib/consultations';
+import './marketing.css';
 
-type View =
-  | 'Overview'
-  | 'Consultations'
-  | 'Coordinators'
-  | 'Patterns'
-  | 'Rubric guide';
-const nav = [
-  { name: 'Overview', icon: LayoutDashboard },
-  { name: 'Consultations', icon: AudioLines },
-  { name: 'Coordinators', icon: Users },
-  { name: 'Patterns', icon: BarChart3 },
-] as const;
-function Navigation({
-  view,
-  onNavigate,
-  count,
-}: {
-  view: View;
-  onNavigate: (v: View) => void;
-  count: number;
-}) {
-  const { setOpenMobile } = useSidebar();
-  const go = (v: View) => {
-    onNavigate(v);
-    setOpenMobile(false);
-  };
+export default function Landing() {
   return (
-    <Sidebar className="app-sidebar" collapsible="offcanvas">
-      <SidebarHeader className="brand">
-        <div className="brand-mark">
-          <AudioLines size={24} />
-        </div>
-        <span>
-          Consult<span className="brand-iq">IQ</span>
-        </span>
-      </SidebarHeader>
-      <SidebarContent>
-        <div className="workspace-switch">
-          <span className="practice-icon">B</span>
-          <div>
-            <strong>Bright Dental</strong>
-            <span>Demo workspace</span>
+    <div className="marketing">
+      <a href="#content" className="skip-link">
+        Skip to content
+      </a>
+      <header className="marketing-header">
+        <Link href="/" className="marketing-logo" aria-label="ConsultIQ home">
+          <AudioLines size={27} />
+          <span>
+            Consult<span>IQ</span>
+          </span>
+        </Link>
+        <nav aria-label="Main navigation">
+          <a href="#workflow">How it works</a>
+          <a href="#product">Product</a>
+          <a href="#principles">Our approach</a>
+        </nav>
+        <Link href="/workspace" className="marketing-login">
+          Open workspace <ArrowUp />
+        </Link>
+      </header>
+      <main id="content">
+        <section className="marketing-hero">
+          <div className="hero-copy">
+            <div className="marketing-kicker">
+              <span /> CONSULTATION INTELLIGENCE
+            </div>
+            <h1>
+              Better coaching
+              <br />
+              starts with the
+              <br />
+              <span>conversation.</span>
+            </h1>
+            <p>
+              A considered workspace for reviewing consultations, understanding
+              what happened, and giving your team a clear next step.
+            </p>
+            <div className="hero-actions">
+              <Link href="/workspace" className="marketing-primary">
+                Enter your workspace <ArrowRight size={17} />
+              </Link>
+              <a href="#workflow" className="marketing-secondary">
+                Explore the workflow <ArrowDown size={15} />
+              </a>
+            </div>
+            <div className="hero-footnote">
+              <LockKeyhole size={14} /> Private pilot · Built for treatment
+              coordination
+            </div>
           </div>
-          <ChevronDown size={15} />
-        </div>
-        <div className="nav-label">WORKSPACE</div>
-        <SidebarMenu className="navigation">
-          {nav.map(({ name, icon: Icon }) => (
-            <SidebarMenuItem key={name}>
-              <SidebarMenuButton
-                className="nav-item"
-                isActive={view === name}
-                onClick={() => go(name)}
-              >
-                <Icon size={19} />
-                <span>{name}</span>
-                {name === 'Consultations' && (
-                  <span className="nav-count">{count}</span>
-                )}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-        <div className="nav-label resource-label">RESOURCES</div>
-        <SidebarMenu className="navigation">
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="nav-item"
-              isActive={view === 'Rubric guide'}
-              onClick={() => go('Rubric guide')}
-            >
-              <BookOpen size={19} />
-              <span>Rubric guide</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="sidebar-insight">
-          <div className="small-icon">
-            <Sparkles size={18} />
-          </div>
-          <strong>
-            Better conversations.
-            <br />
-            Better care.
-          </strong>
-          <p>Turn every consultation into an opportunity to grow.</p>
-          <button onClick={() => go('Patterns')}>
-            Explore insights <ArrowRight size={15} />
-          </button>
-        </div>
-      </SidebarContent>
-      <SidebarFooter className="sidebar-footer">
-        <div className="demo-status">
-          <span /> Synthetic demo data
-        </div>
-        <div className="profile">
-          <div className="avatar user-avatar">BD</div>
-          <div>
-            <strong>Bright Dental</strong>
-            <span>Practice workspace</span>
-          </div>
-          <ShieldCheck size={18} />
-        </div>
-      </SidebarFooter>
-    </Sidebar>
-  );
-}
-function Score({ value }: { value: number | null }) {
-  return value === null ? (
-    <span className="muted">Unscored</span>
-  ) : (
-    <span className={`score ${value < 3 ? 'score-low' : ''}`}>
-      <span className="score-dot" />
-      {value.toFixed(1)}
-      <span>/ 5</span>
-    </span>
-  );
-}
-function OutcomeBadge({ outcome }: { outcome: Consultation['outcome'] }) {
-  return (
-    <span
-      className={`status status-${outcome.toLowerCase().replaceAll(' ', '-')}`}
-    >
-      <span />
-      {outcome}
-    </span>
-  );
-}
-function download(calls: Consultation[]) {
-  const url = URL.createObjectURL(
-    new Blob([csvExport(calls)], { type: 'text/csv;charset=utf-8;' }),
-  );
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'consultiq-consultations.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-function CallsTable({
-  calls,
-  onOpen,
-}: {
-  calls: Consultation[];
-  onOpen: (c: Consultation) => void;
-}) {
-  return (
-    <Table className="calls-table">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Consultation</TableHead>
-          <TableHead>Coordinator</TableHead>
-          <TableHead>Date</TableHead>
-          <TableHead>Rubric score</TableHead>
-          <TableHead>Outcome</TableHead>
-          <TableHead>
-            <span className="sr-only">Open report</span>
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {calls.map((c) => (
-          <TableRow key={c.id}>
-            <TableCell>
-              <button className="call-link" onClick={() => onOpen(c)}>
-                <span className="call-icon">
-                  <AudioLines size={18} />
-                </span>
-                <span>
-                  <strong>{c.title}</strong>
-                  <small>
-                    {c.id} <span>·</span>{' '}
-                    {c.duration
-                      ? `${Math.floor(c.duration / 60)}m ${c.duration % 60}s`
-                      : 'Text transcript'}
-                  </small>
-                </span>
-              </button>
-            </TableCell>
-            <TableCell>
-              <div className="person">
-                <span
-                  className={`avatar avatar-${coordinators.indexOf(c.coordinator) % 4}`}
-                >
-                  {c.initials}
-                </span>
-                {c.coordinator}
+          <div className="hero-visual">
+            <div className="visual-caption">
+              <span className="visual-caption-line" /> FROM CONVERSATION TO
+              CLARITY
+            </div>
+            <div className="product-window">
+              <div className="window-top">
+                <div className="window-dots">
+                  <i />
+                  <i />
+                  <i />
+                </div>
+                <span>Consultation review</span>
+                <LockKeyhole size={12} />
               </div>
-            </TableCell>
-            <TableCell className="date-cell">
-              {new Date(c.date + 'T12:00:00Z').toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                timeZone: 'UTC',
-              })}
-            </TableCell>
-            <TableCell>
-              <Score value={averageScore(c)} />
-            </TableCell>
-            <TableCell>
-              <OutcomeBadge outcome={c.outcome} />
-            </TableCell>
-            <TableCell>
-              <button
-                className="icon-button"
-                aria-label={`Open ${c.id} report`}
-                onClick={() => onOpen(c)}
-              >
-                <ArrowUpRight size={18} />
-              </button>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-function PerformanceChart({ calls }: { calls: Consultation[] }) {
-  const buckets = Array.from({ length: 6 }, (_, i) => {
-    const start = new Date(Date.UTC(2026, 7, 16 + i * 4))
-      .toISOString()
-      .slice(0, 10);
-    const end = new Date(Date.UTC(2026, 7, 20 + i * 4))
-      .toISOString()
-      .slice(0, 10);
-    const entries = calls.filter(
-      (c) => c.source === 'Demo' && c.date >= start && c.date < end,
-    );
-    return {
-      label: start.slice(5).replace('-', '/'),
-      score: summarize(entries).score ?? 0,
-    };
-  });
-  const points = buckets
-    .map((b, i) => `${54 + i * 104},${207 - b.score * 31}`)
-    .join(' ');
-  return (
-    <div className="performance-chart">
-      <svg
-        viewBox="0 0 620 237"
-        aria-label={`Average rubric scores across chronological demo groups: ${buckets.map((b) => `${b.label}: ${b.score.toFixed(1)}`).join(', ')}`}
-      >
-        <defs>
-          <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4369ed" stopOpacity=".17" />
-            <stop offset="100%" stopColor="#4369ed" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <g key={n}>
-            <line
-              x1="40"
-              x2="594"
-              y1={207 - n * 31}
-              y2={207 - n * 31}
-              stroke="#e9edf4"
-              strokeDasharray="4 5"
-            />
-            <text x="13" y={211 - n * 31}>
-              {n}.0
-            </text>
-          </g>
-        ))}
-        <polygon points={`54,192 ${points} 574,192`} fill="url(#chartFill)" />
-        <polyline
-          points={points}
-          stroke="#4369ed"
-          strokeWidth="3"
-          fill="none"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        {buckets.map((b, i) => (
-          <g key={i}>
-            <circle
-              cx={54 + i * 104}
-              cy={207 - b.score * 31}
-              r="4"
-              fill="white"
-              stroke="#4369ed"
-              strokeWidth="2"
-            />
-            <text x={54 + i * 104} y="226" textAnchor="middle">
-              {b.label}
-            </text>
-          </g>
-        ))}
-      </svg>
+              <div className="window-content">
+                <div className="window-breadcrumb">
+                  CONSULTATIONS <ChevronRight size={11} /> REVIEW
+                </div>
+                <div className="window-title">
+                  <h2>
+                    A closer look at
+                    <br />
+                    the next step.
+                  </h2>
+                  <span>
+                    <ClipboardCheck size={18} />
+                  </span>
+                </div>
+                <div className="window-tabs">
+                  <span>Transcript</span>
+                  <span>Assessment</span>
+                  <span>History</span>
+                </div>
+                <div className="transcript-illustration">
+                  <span className="illustration-label">
+                    ILLUSTRATIVE TRANSCRIPT
+                  </span>
+                  <div className="illustration-speaker">
+                    <span>P</span>
+                    <strong>Patient</strong>
+                  </div>
+                  <p>“I’d like some time to think about it.”</p>
+                  <div className="illustration-speaker coordinator">
+                    <span>TC</span>
+                    <strong>Coordinator</strong>
+                  </div>
+                  <div className="highlighted-excerpt">
+                    “Of course. Would Thursday afternoon work for a follow-up?”
+                    <span>
+                      <ScanText size={13} /> Source excerpt
+                    </span>
+                  </div>
+                </div>
+                <div className="window-bottom">
+                  <span>
+                    <CheckCheck size={14} /> Evidence attached to the review
+                  </span>
+                  <span>Follow-up commitment</span>
+                </div>
+              </div>
+            </div>
+            <div className="floating-note">
+              <div className="note-icon">
+                <MessageSquareText size={20} />
+              </div>
+              <div>
+                <span>COACHING FOCUS</span>
+                <strong>Make the next step specific.</strong>
+                <p>A clear time. A named owner. A shared plan.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section className="value-strip" aria-label="Product principles">
+          <span>
+            Built for thoughtful
+            <br />
+            <strong>consultation teams.</strong>
+          </span>
+          <div>
+            <ScanText size={23} />
+            <strong>Evidence, in context</strong>
+          </div>
+          <div>
+            <Layers3 size={23} />
+            <strong>Your standard, consistently</strong>
+          </div>
+          <div>
+            <BookOpen size={23} />
+            <strong>Knowledge that stays useful</strong>
+          </div>
+        </section>
+        <section id="workflow" className="marketing-section workflow-section">
+          <div className="section-heading">
+            <div>
+              <span className="marketing-kicker">A CLEARER REVIEW PROCESS</span>
+              <h2>
+                From a conversation
+                <br />
+                to a useful coaching moment.
+              </h2>
+            </div>
+            <p>
+              Keep the transcript, the assessment, and the next action together.
+              Give every review a clear source of truth.
+            </p>
+          </div>
+          <div className="workflow-cards">
+            {[
+              {
+                step: '01',
+                icon: FileText,
+                title: 'Bring in the conversation',
+                text: 'Import a speaker-labeled transcript. Organize it by coordinator and consultation, with a record you can return to.',
+              },
+              {
+                step: '02',
+                icon: ScanText,
+                title: 'Review with evidence',
+                text: 'Assess observable behaviors against your rubric. Attach the exact words behind each score and preserve your review history.',
+              },
+              {
+                step: '03',
+                icon: MessageSquareText,
+                title: 'Make coaching specific',
+                text: 'Use approved guidance to frame the next step. Give feedback that connects directly to what was said.',
+              },
+            ].map(({ step, icon: Icon, title, text }) => (
+              <article key={step}>
+                <div className="workflow-card-top">
+                  <span>{step}</span>
+                  <Icon size={23} />
+                </div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section id="product" className="marketing-section product-section">
+          <div className="section-heading">
+            <div>
+              <span className="marketing-kicker">
+                THE DETAILS MAKE THE DIFFERENCE
+              </span>
+              <h2>
+                A shared standard.
+                <br />
+                Room for human judgment.
+              </h2>
+            </div>
+            <p>
+              Build a review practice your team can understand, question, and
+              improve.
+            </p>
+          </div>
+          <div className="product-feature-grid">
+            <article className="feature-evidence">
+              <div className="feature-icon">
+                <Quote size={21} />
+              </div>
+              <h3>Keep the evidence close.</h3>
+              <p>
+                A score should lead back to the conversation. Select a
+                transcript turn, attach a source excerpt, and make the
+                assessment reviewable.
+              </p>
+              <div className="evidence-visual">
+                <span>REVIEW TRAIL</span>
+                <div>
+                  <span className="evidence-step-icon">
+                    <FileText size={16} />
+                  </span>
+                  <strong>Original transcript</strong>
+                  <Check size={15} />
+                </div>
+                <i />
+                <div>
+                  <span className="evidence-step-icon">
+                    <ScanText size={16} />
+                  </span>
+                  <strong>Supporting excerpt</strong>
+                  <Check size={15} />
+                </div>
+                <i />
+                <div>
+                  <span className="evidence-step-icon">
+                    <ClipboardCheck size={16} />
+                  </span>
+                  <strong>Reviewer assessment</strong>
+                  <Check size={15} />
+                </div>
+              </div>
+            </article>
+            <article className="feature-rubric">
+              <div className="feature-icon">
+                <Layers3 size={21} />
+              </div>
+              <h3>Your rubric. Clearly defined.</h3>
+              <p>
+                Define the anchors your team uses. Publish a version and keep
+                existing assessments tied to the standard used at the time.
+              </p>
+              <div className="rubric-visual">
+                {[
+                  'Needs discovery',
+                  'Presentation clarity',
+                  'Objection response',
+                  'Follow-up commitment',
+                ].map((name, i) => (
+                  <div key={name}>
+                    <span>0{i + 1}</span>
+                    <strong>{name}</strong>
+                    <ChevronRight size={14} />
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="feature-library">
+              <div className="feature-icon">
+                <BookOpen size={21} />
+              </div>
+              <h3>Put your playbook to work.</h3>
+              <p>
+                Keep approved training material in a private library. Find
+                relevant passages and ground coaching suggestions in documented
+                guidance.
+              </p>
+              <div className="library-visual">
+                <div>
+                  <FileText size={17} />
+                  <span>Consultation playbook</span>
+                  <span className="approved-label">Approved</span>
+                </div>
+                <div>
+                  <FileText size={17} />
+                  <span>Follow-up guidelines</span>
+                  <span className="approved-label">Approved</span>
+                </div>
+                <div className="library-caption">
+                  <ShieldCheck size={14} /> Knowledge with a traceable source
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+        <section id="principles" className="principles-section">
+          <div>
+            <span className="marketing-kicker">BUILT WITH CARE</span>
+            <h2>
+              Trust comes from
+              <br />
+              being able to look closer.
+            </h2>
+            <p>
+              ConsultIQ supports professional judgment with a transparent review
+              process.
+            </p>
+          </div>
+          <div className="principles-list">
+            <article>
+              <span>01</span>
+              <div>
+                <h3>Evidence before confidence</h3>
+                <p>
+                  Unsupported assessments stay visible. A missing source should
+                  never become a convincing score.
+                </p>
+              </div>
+            </article>
+            <article>
+              <span>02</span>
+              <div>
+                <h3>A record of what changed</h3>
+                <p>
+                  Keep rubric versions and assessment history so a correction
+                  adds context without erasing the original.
+                </p>
+              </div>
+            </article>
+            <article>
+              <span>03</span>
+              <div>
+                <h3>A defined pilot scope</h3>
+                <p>
+                  Start with synthetic and role-play transcripts. Audio
+                  transcription and real patient data workflows require
+                  additional onboarding and validation.
+                </p>
+              </div>
+            </article>
+          </div>
+        </section>
+        <section className="marketing-cta">
+          <div>
+            <span className="marketing-kicker">MAKE THE NEXT REVIEW COUNT</span>
+            <h2>Start with one conversation.</h2>
+            <p>
+              Bring a transcript. Define your standard. Make the feedback
+              useful.
+            </p>
+          </div>
+          <Link href="/workspace" className="marketing-primary">
+            Open your workspace <ArrowRight size={18} />
+          </Link>
+        </section>
+      </main>
+      <footer className="marketing-footer">
+        <Link href="/" className="marketing-logo">
+          <AudioLines size={23} />
+          <span>
+            Consult<span>IQ</span>
+          </span>
+        </Link>
+        <span>Consultation intelligence, with evidence.</span>
+        <div>
+          <a href="#principles">Our approach</a>
+          <Link href="/workspace">
+            Workspace <ArrowUp />
+          </Link>
+        </div>
+      </footer>
     </div>
   );
 }
-export default function Home() {
-  const [importOpen, setImportOpen] = useState(false);
-  const [view, setView] = useState<View>('Overview');
-  const [calls, setCalls] = useState(demoCalls);
-  const [query, setQuery] = useState('');
-  const [coordinator, setCoordinator] = useState('all');
-  const [outcome, setOutcome] = useState('all');
-  const [selected, setSelected] = useState<Consultation | null>(null);
-  const filtered = filterCalls(calls, query, coordinator, outcome);
-  const stats = summarize(filtered);
-  const navigate = (v: View) => {
-    setView(v);
-    setSelected(null);
-    setQuery('');
-    setCoordinator('all');
-    setOutcome('all');
-  };
-  useEffect(() => {
-    const context = (
-      document as Document & {
-        modelContext?: {
-          registerTool: (
-            tool: unknown,
-            options: { signal: AbortSignal },
-          ) => void | Promise<void>;
-        };
-      }
-    ).modelContext;
-    if (!context?.registerTool) return;
-    const lifecycle = new AbortController();
-    try {
-      void Promise.resolve(
-        context.registerTool(
-          {
-            name: 'open_demo_consultation',
-            description:
-              'Open a synthetic demo consultation report in the workspace. Use a demo call ID from CQ-1025 to CQ-1048.',
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-              additionalProperties: false,
-            },
-            annotations: { readOnlyHint: false, untrustedContentHint: false },
-            execute(input: unknown) {
-              if (
-                !input ||
-                typeof input !== 'object' ||
-                !('id' in input) ||
-                typeof input.id !== 'string' ||
-                Object.keys(input).length !== 1
-              )
-                throw new Error('Expected a single string id.');
-              const call = demoCalls.find((c) => c.id === input.id);
-              if (!call) throw new Error('Demo consultation not found.');
-              flushSync(() => {
-                setView('Consultations');
-                setSelected(call);
-              });
-              return {
-                id: call.id,
-                title: call.title,
-                view: 'Call review',
-                source: 'Demo',
-              };
-            },
-          },
-          { signal: lifecycle.signal },
-        ),
-      ).catch(() => {});
-    } catch {}
-    return () => lifecycle.abort();
-  }, []);
-  return (
-    <SidebarProvider
-      style={{ '--sidebar-width': '244px' } as React.CSSProperties}
-    >
-      <a className="skip-link" href="#main">
-        Skip to content
-      </a>
-      <Navigation view={view} onNavigate={navigate} count={calls.length} />
-      <div className="main-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <SidebarTrigger className="mobile-toggle" />
-            <span>Workspace</span>
-            <ChevronRight size={14} />
-            <strong>{selected ? 'Call review' : view}</strong>
-          </div>
-          <div className="topbar-right">
-            <span className="demo-pill">
-              <span /> Demo environment
-            </span>
-            <span className="header-divider" />
-            <span className="avatar user-avatar">BD</span>
-          </div>
-        </header>
-        <main id="main" className="workspace">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">YOUR CONVERSATIONS, IN FOCUS</div>
-              <h1>
-                {selected
-                  ? selected.title
-                  : view === 'Overview'
-                    ? 'A clearer picture. Better conversations.'
-                    : view}
-              </h1>
-              <p>
-                {selected
-                  ? 'An evidence-led view of the conversation.'
-                  : view === 'Overview'
-                    ? 'See what’s working, find the opportunities, and help your team grow.'
-                    : view === 'Coordinators'
-                      ? 'Understand each coordinator’s strengths and where to focus next.'
-                      : view === 'Patterns'
-                        ? 'Look across conversations to find your next coaching opportunity.'
-                        : view === 'Rubric guide'
-                          ? 'A shared language for more thoughtful consultations.'
-                          : 'Review the moments that shape each patient’s decision.'}
-              </p>
-            </div>
-            <button
-              className="primary-button"
-              onClick={() => setImportOpen(true)}
-            >
-              <Plus size={18} /> New consultation
-            </button>
-          </div>
-          {!selected && view !== 'Rubric guide' && (
-            <div className="toolbar">
-              <div className="toolbar-left">
-                <span className="date-filter">
-                  <CalendarDays size={16} /> Demo: Aug 16 – Sep 8, 2026
-                </span>
-                <NativeSelect
-                  aria-label="Filter by coordinator"
-                  value={coordinator}
-                  onChange={(e) => setCoordinator(e.target.value)}
-                >
-                  <NativeSelectOption value="all">
-                    All coordinators
-                  </NativeSelectOption>
-                  {coordinators.map((n) => (
-                    <NativeSelectOption key={n} value={n}>
-                      {n}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                {view === 'Consultations' && (
-                  <NativeSelect
-                    aria-label="Filter by outcome"
-                    value={outcome}
-                    onChange={(e) => setOutcome(e.target.value)}
-                  >
-                    <NativeSelectOption value="all">
-                      All outcomes
-                    </NativeSelectOption>
-                    {['Accepted', 'Follow-up', 'Not accepted', 'Unscored'].map(
-                      (o) => (
-                        <NativeSelectOption key={o}>{o}</NativeSelectOption>
-                      ),
-                    )}
-                  </NativeSelect>
-                )}
-              </div>
-              <button
-                className="quiet-button"
-                onClick={() => download(filtered)}
-              >
-                <ArrowDownToLine size={16} /> Export report
-              </button>
-            </div>
-          )}
-          {!selected && view === 'Overview' && (
-            <>
-              <section className="metrics" aria-label="Workspace metrics">
-                {[
-                  {
-                    label: 'Consultations reviewed',
-                    value: stats.count,
-                    detail: 'Across your selected coordinators',
-                    icon: AudioLines,
-                    tone: 'blue',
-                  },
-                  {
-                    label: 'Average rubric score',
-                    value: stats.score?.toFixed(1) ?? '—',
-                    suffix: '/ 5',
-                    detail: 'Across all eight dimensions',
-                    icon: Activity,
-                    tone: 'violet',
-                  },
-                  {
-                    label: 'Case acceptance',
-                    value:
-                      stats.acceptance === null
-                        ? '—'
-                        : `${Math.round(stats.acceptance)}%`,
-                    detail: 'Accepted / known outcomes',
-                    icon: Target,
-                    tone: 'green',
-                  },
-                  {
-                    label: 'Coaching opportunities',
-                    value: stats.needsReview,
-                    detail: 'Calls with a dimension scored 2 or less',
-                    icon: Lightbulb,
-                    tone: 'amber',
-                  },
-                ].map(({ label, value, suffix, detail, icon: Icon, tone }) => (
-                  <article className="metric-card" key={label}>
-                    <div className="metric-label">
-                      {label}
-                      <span className={`metric-icon ${tone}`}>
-                        <Icon size={18} />
-                      </span>
-                    </div>
-                    <div className="metric-value">
-                      {value}
-                      <span>{suffix}</span>
-                    </div>
-                    <div className="metric-detail">{detail}</div>
-                  </article>
-                ))}
-              </section>
-              <section className="insights-grid">
-                <article className="panel performance-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>Conversation quality</h2>
-                      <p>Average rubric score over the demo period</p>
-                    </div>
-                    <span className="chart-legend">
-                      <i /> Rubric score
-                    </span>
-                  </div>
-                  <PerformanceChart calls={filtered} />
-                  <div className="chart-footer">
-                    <ShieldCheck size={15} />
-                    <span>
-                      Illustrative scores. Select a consultation to inspect the
-                      evidence.
-                    </span>
-                  </div>
-                </article>
-                <article className="focus-card">
-                  <div className="focus-label">
-                    <Sparkles size={16} /> COACHING SPOTLIGHT
-                  </div>
-                  <h2>
-                    A good conversation
-                    <br />
-                    deserves a clear next step.
-                  </h2>
-                  <p>
-                    Some demo calls end with “give us a call.” Turn an open
-                    ending into a specific, shared commitment.
-                  </p>
-                  <div className="focus-dimension">
-                    <span className="focus-icon">
-                      <CalendarDays size={22} />
-                    </span>
-                    <div>
-                      <strong>Follow-up commitment</strong>
-                      <span>A small change with a clear action</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setView('Consultations');
-                      setOutcome('Follow-up');
-                    }}
-                  >
-                    Review follow-up calls <ArrowRight size={17} />
-                  </button>
-                </article>
-              </section>
-            </>
-          )}
-          {!selected && (view === 'Overview' || view === 'Consultations') && (
-            <section className="panel recent-panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>
-                    {view === 'Overview'
-                      ? 'Recent consultations'
-                      : 'Consultations'}{' '}
-                    <span className="count-badge">{filtered.length}</span>
-                  </h2>
-                  <p>Every conversation has something to teach us.</p>
-                </div>
-                {view === 'Overview' ? (
-                  <button
-                    className="text-button"
-                    onClick={() => navigate('Consultations')}
-                  >
-                    View all consultations <ArrowRight size={16} />
-                  </button>
-                ) : (
-                  <label className="search-field">
-                    <Search size={17} />
-                    <input
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search consultations…"
-                      aria-label="Search consultations"
-                    />
-                  </label>
-                )}
-              </div>
-              <CallsTable
-                calls={view === 'Overview' ? filtered.slice(0, 5) : filtered}
-                onOpen={(c) => {
-                  setSelected(c);
-                  setView('Consultations');
-                }}
-              />
-              {filtered.length === 0 && (
-                <div className="empty-state">
-                  <Search />
-                  <h3>No consultations found</h3>
-                  <p>Try another name, treatment, or coordinator.</p>
-                  <button
-                    className="text-button"
-                    onClick={() => navigate('Consultations')}
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-          {selected && (
-            <CallReview
-              key={selected.id}
-              call={selected}
-              onBack={() => setSelected(null)}
-            />
-          )}{' '}
-          {!selected && view === 'Coordinators' && (
-            <CoordinatorView
-              calls={filtered}
-              onReview={(name) => {
-                setView('Consultations');
-                setCoordinator(name);
-              }}
-            />
-          )}
-          {!selected && view === 'Patterns' && (
-            <PatternView
-              calls={filtered}
-              onReview={() => {
-                setView('Consultations');
-                setOutcome('Follow-up');
-              }}
-            />
-          )}
-          {!selected && view === 'Rubric guide' && <RubricGuide />}
-          <ImportDialog
-            open={importOpen}
-            onOpenChange={setImportOpen}
-            onImport={(call) => {
-              setCalls((old) => [call, ...old]);
-              setView('Consultations');
-              setSelected(call);
-              setQuery('');
-              setCoordinator('all');
-              setOutcome('all');
-            }}
-          />
-          <footer className="workspace-footer">
-            <span>
-              <ShieldCheck size={14} /> Built around evidence. Designed for
-              better care.
-            </span>
-            <span>Illustrative data · No real patient recordings</span>
-          </footer>
-        </main>
-      </div>
-    </SidebarProvider>
-  );
+function ArrowUp() {
+  return <ArrowRight size={16} style={{ transform: 'rotate(-40deg)' }} />;
 }

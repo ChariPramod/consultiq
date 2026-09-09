@@ -39,3 +39,7 @@ next-env.d.ts
 
 # TypeScript incremental cache
 *.tsbuildinfo
+
+# Worker runtime secrets
+.dev.vars*
+!.dev.vars.example
