@@ -38,6 +38,7 @@ There are no seeded customer records, fabricated performance metrics, or accepta
 
 ## Project documentation
 
+- [Data, cloud, market research and next build](docs/DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md)
 - [Your actions and decisions](docs/OWNER_ACTIONS.md)
 - [Product direction and release gates](docs/PRODUCT_PLAN.md)
 - [Implementation and architecture](docs/IMPLEMENTATION.md)

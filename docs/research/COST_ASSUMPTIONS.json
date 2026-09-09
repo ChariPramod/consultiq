@@ -1,0 +1,35 @@
+{
+  "as_of": "2026-09-09",
+  "currency": "USD",
+  "assumed_calls": 1000,
+  "assumed_minutes_per_call": 10,
+  "assumed_input_tokens_per_assessment": 8000,
+  "assumed_output_tokens_per_assessment": 2000,
+  "sonnet_4_6_input_per_million": 3,
+  "sonnet_4_6_output_per_million": 15,
+  "deepgram_nova3_mono_prerecorded_per_minute": 0.0043,
+  "deepgram_flux_english_streaming_current_per_minute": 0.0065,
+  "twilio_us_inbound_local_per_minute": 0.0085,
+  "twilio_recording_per_minute": 0.0025,
+  "twilio_media_streams_per_minute": 0.0044,
+  "twilio_local_number_per_month": 1.15,
+  "cloudflare_workers_paid_minimum_monthly": 5,
+  "sources": {
+    "model": "https://claude.com/pricing",
+    "speech": "https://deepgram.com/pricing",
+    "telephony": "https://www.twilio.com/en-us/voice/pricing/us",
+    "hosting": "https://developers.cloudflare.com/workers/platform/pricing/"
+  },
+  "calculated": {
+    "assessment_only": 54.0,
+    "prerecorded_stt": 43.0,
+    "imported_audio_stt_and_assessment": 97.0,
+    "new_inbound_call_leg": 85.0,
+    "new_recording": 25.0,
+    "recorded_inbound_single_leg_subtotal": 208.15,
+    "recorded_inbound_with_workers_minimum": 213.15,
+    "live_stream_transport": 44.0,
+    "live_flux_stt": 65.0,
+    "live_single_leg_assist_with_recording_workers": 279.15
+  }
+}
