@@ -4,76 +4,8 @@ import { AppError, Repository, requiredText } from './repository.ts';
 import { configuration, dailyLimit, type RuntimeConfig } from './config.ts';
 import { normalizeQuote } from '../lib/evidence.ts';
 import { DIMENSIONS } from '../lib/product.ts';
-export type ModelCall = (system: string, input: unknown) => Promise<unknown>;
-export function modelClient(env: RuntimeConfig): ModelCall {
-  return async (system, input) => {
-    if (!configuration(env).scoring)
-      throw new AppError(
-        503,
-        'provider_not_configured',
-        'Automated analysis is not enabled. Configure the model provider first.',
-      );
-    let response: Response;
-    try {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          'x-api-key': env.ANTHROPIC_API_KEY!,
-        },
-        body: JSON.stringify({
-          model: env.AI_MODEL,
-          max_tokens: 6000,
-          system,
-          messages: [{ role: 'user', content: JSON.stringify(input) }],
-        }),
-        signal: AbortSignal.timeout(45000),
-      });
-    } catch {
-      throw new AppError(
-        502,
-        'provider_unavailable',
-        'The analysis provider did not respond. Please retry.',
-      );
-    }
-    if (!response.ok)
-      throw new AppError(
-        502,
-        'provider_error',
-        'The analysis provider could not complete this request. Check the provider configuration and usage limits.',
-      );
-    const raw = await response.text();
-    if (raw.length > 150000)
-      throw new AppError(
-        502,
-        'provider_output_invalid',
-        'The analysis response exceeded the allowed size.',
-      );
-    try {
-      const body = JSON.parse(raw) as {
-        stop_reason: string;
-        content: { type: string; text?: string }[];
-      };
-      if (body.stop_reason !== 'end_turn')
-        throw new Error('Incomplete response');
-      const text = body.content
-        .filter((c) => c.type === 'text')
-        .map((c) => c.text ?? '')
-        .join('')
-        .replace(/^```(?:json)?\s*/, '')
-        .replace(/\s*```$/, '')
-        .trim();
-      return JSON.parse(text);
-    } catch {
-      throw new AppError(
-        502,
-        'provider_output_invalid',
-        'The provider returned an incomplete or invalid assessment. No result was saved.',
-      );
-    }
-  };
-}
+import { modelClient, type ModelCall } from './model.ts';
+export { modelClient, type ModelCall } from './model.ts';
 async function observed<T>(
   env: RuntimeConfig,
   name: string,
@@ -268,6 +200,7 @@ export async function runCoaching(
         answer,
         citations,
         env.AI_MODEL!,
+        context.map(({ chunk_id, document_id }) => ({ chunk_id, document_id })),
       );
       await repo.finishJob(jobId);
       return saved;

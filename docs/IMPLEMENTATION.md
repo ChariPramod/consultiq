@@ -29,7 +29,9 @@ flowchart LR
 | `lib/evidence.ts`, `lib/assessment.ts` | Deterministic quote checks and supported-score rules |
 | `server/handler.ts` | HTTP authentication, origin checks, body limits and routing |
 | `server/repository.ts` | Workspace-scoped persistence and state transitions |
-| `server/ai.ts` | Provider boundary, assessment, RAG and optional tracing |
+| `server/ai.ts` | Assessment, RAG and optional tracing |
+| `server/model.ts` | Configured provider HTTP adapter, bounded response reads and sanitized failures |
+| `lib/evaluation.ts`, `scripts/evaluate.mjs` | Offline aggregate comparison against independent reference scores |
 | `db/schema.ts`, `drizzle/` | Database definition and generated migration history |
 | `tests/` | Domain and API tests against real SQLite migrations |
 
@@ -41,7 +43,7 @@ Every assessment stores its rubric version, author kind, prompt version and mode
 
 ## Retrieval and coaching
 
-Adding an approved text document creates scoped chunks. Search uses normalized keywords and ranks matching passages. Coaching supplies the selected transcript and retrieved passages to the configured model. Every returned citation must identify a retrieved chunk and contain a quote found in that chunk. Unsupported answers are rejected instead of stored.
+Adding an approved text document creates scoped chunks. Search uses normalized keywords and ranks matching passages. Coaching supplies the selected transcript and retrieved passages to the configured model. Every returned citation must identify a retrieved chunk and contain a quote found in that chunk. Unsupported answers are rejected instead of stored. At persistence time, one atomic statement checks that the consultation and every retrieved source still exist in the workspace. Deletion during generation returns a conflict and does not recreate removed source content or emit a successful-save audit event.
 
 This validates citation identity and text, not the semantic correctness of every sentence. Generated coaching remains marked for human review. Deleting a library document removes its chunks and clears saved coaching answers in that workspace to avoid retaining copied passages from removed material. Deleting a consultation cascades to its assessments, coaching and jobs. Metadata-only audit events remain.
 
@@ -75,3 +77,11 @@ Analysis runs during the HTTP request. A job record captures running, completed,
 Optional LangSmith instrumentation wraps assessment and coaching runs. Traces include run name, job ID, model, timing and errors; input/output content is hidden in the client before upload. Trace delivery is flushed before the request finishes. This release does not provide nested retrieval/model/validation spans, token cost accounting, evaluation datasets or automatic feedback synchronization. Application job history remains available without LangSmith.
 
 The instrumentation uses LangSmith's [custom tracing](https://docs.langchain.com/langsmith/annotate-code) and [input/output masking](https://docs.langchain.com/langsmith/mask-inputs-outputs). Masking trace payloads does not stop the model provider receiving transcript and source content needed for generation.
+
+## Offline assessment evaluation
+
+The evaluator calls the same assessment preparation and quote validation used by the application. It compares validated scores with supplied reference scores, reports numeric agreement only on mutually scored dimensions, and reports support/abstention disagreements separately. Missing numeric denominators produce null metrics. CLI reports include version metadata and an input hash but omit per-case identifiers, transcript text, quotes and coaching content. See [Evaluation](EVALUATION.md). This is evaluation infrastructure, not a completed domain benchmark.
+
+## Provider response handling
+
+The provider adapter reads response chunks under a byte limit instead of buffering an arbitrary response before checking its length. Failed HTTP response bodies are cancelled without exposing their content. Network failures, incomplete body streams and malformed or truncated model envelopes produce sanitized errors. Requests retain the configured timeout; no automatic paid retry was added.

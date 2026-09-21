@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "dataset_version": "engineering-example-v1",
+    "rubric_version": "no-domain-rubric",
+    "prompt_version": "engineering-stub-v1",
+    "model_version": "no-model",
+    "reference_version": "engineering-values-v1",
+    "reference_source": "synthetic_engineering",
+    "split": "development"
+  },
+  "cases": [
+    {
+      "id": "synthetic-example",
+      "turns": [
+        {
+          "role": "Coordinator",
+          "text": "This is a synthetic engineering test sentence."
+        },
+        {
+          "role": "Patient",
+          "text": "This is a synthetic engineering response."
+        }
+      ],
+      "prediction": [
+        {
+          "dimension": 0,
+          "score": 3,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": [
+            {
+              "turn_index": 0,
+              "span": "synthetic engineering test sentence"
+            }
+          ]
+        },
+        {
+          "dimension": 1,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        },
+        {
+          "dimension": 2,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        },
+        {
+          "dimension": 3,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        },
+        {
+          "dimension": 4,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        },
+        {
+          "dimension": 5,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        },
+        {
+          "dimension": 6,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        },
+        {
+          "dimension": 7,
+          "score": null,
+          "rationale": "Synthetic arithmetic fixture, not a domain assessment.",
+          "coaching_note": "",
+          "evidence": []
+        }
+      ],
+      "reference": [
+        {
+          "dimension": 0,
+          "score": 4
+        },
+        {
+          "dimension": 1,
+          "score": null
+        },
+        {
+          "dimension": 2,
+          "score": null
+        },
+        {
+          "dimension": 3,
+          "score": null
+        },
+        {
+          "dimension": 4,
+          "score": null
+        },
+        {
+          "dimension": 5,
+          "score": null
+        },
+        {
+          "dimension": 6,
+          "score": null
+        },
+        {
+          "dimension": 7,
+          "score": null
+        }
+      ]
+    }
+  ]
+}

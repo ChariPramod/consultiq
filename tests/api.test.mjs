@@ -491,3 +491,116 @@ test('another workspace cannot inject its rubric into a private review', async (
     close();
   }
 });
+
+for (const removed of ['cited source', 'uncited source', 'consultation']) {
+  test(`coaching cannot restore content after an in-flight ${removed} deletion`, async () => {
+    const { db, close } = setup();
+    try {
+      const c = (await call(db, 'consultations', 'POST', input)).data;
+      for (const title of [
+        'Follow-up guide',
+        'Additional follow-up guidance',
+      ]) {
+        await call(db, 'library', 'POST', {
+          title,
+          body: 'Confirm the follow-up date and the person responsible for calling.',
+          approved: true,
+        });
+      }
+      const result = await call(
+        db,
+        `consultations/${c.id}/coaching`,
+        'POST',
+        { question: 'How should I confirm follow-up?' },
+        'owner-a',
+        async (_system, payload) => {
+          assert.equal(payload.sources.length, 2);
+          const path =
+            removed === 'consultation'
+              ? `consultations/${c.id}`
+              : `library/${payload.sources[removed === 'cited source' ? 0 : 1].document_id}`;
+          assert.equal((await call(db, path, 'DELETE')).status, 200);
+          return {
+            answer: 'Confirm the date and name the owner.',
+            citations: [
+              {
+                chunk_id: payload.sources[0].chunk_id,
+                span: 'Confirm the follow-up date',
+              },
+            ],
+          };
+        },
+        { ANTHROPIC_API_KEY: 'test-only', AI_MODEL: 'test-model' },
+      );
+      assert.equal(result.status, 409);
+      assert.equal(result.data.error, 'coaching_context_changed');
+      assert.equal(
+        (
+          await db
+            .prepare('SELECT COUNT(*) AS total FROM coaching_runs')
+            .first()
+        ).total,
+        0,
+      );
+      assert.equal(
+        (
+          await db
+            .prepare(
+              "SELECT COUNT(*) AS total FROM audit_events WHERE action='coaching_saved'",
+            )
+            .first()
+        ).total,
+        0,
+      );
+      const workspace = (await call(db, 'workspace')).data;
+      if (removed === 'consultation') assert.equal(workspace.jobs.length, 0);
+      else {
+        assert.equal(workspace.jobs[0].status, 'failed');
+        assert.equal(workspace.jobs[0].error_code, 'coaching_context_changed');
+      }
+    } finally {
+      close();
+    }
+  });
+}
+
+test('coaching persistence rejects another workspace’s consultation and source identities', async () => {
+  const { db, close } = setup();
+  try {
+    const owner = await Repository.forUser(db, 'owner-a');
+    const other = await Repository.forUser(db, 'owner-b');
+    const ownCall = await owner.createCall(input);
+    const otherCall = await other.createCall(input);
+    for (const repo of [owner, other]) {
+      await repo.addDocument({
+        title: 'Guide',
+        body: 'Confirm the follow-up date.',
+        approved: true,
+      });
+    }
+    const [ownSource] = await owner.retrieve('follow-up');
+    const [otherSource] = await other.retrieve('follow-up');
+    for (const [callId, source] of [
+      [otherCall.id, ownSource],
+      [ownCall.id, otherSource],
+    ]) {
+      await assert.rejects(
+        owner.saveCoaching(
+          callId,
+          'Follow-up?',
+          'Confirm the date.',
+          [{ ...source, span: 'Confirm the follow-up date.' }],
+          'test-model',
+        ),
+        { status: 409, code: 'coaching_context_changed' },
+      );
+    }
+    assert.equal(
+      (await db.prepare('SELECT COUNT(*) AS total FROM coaching_runs').first())
+        .total,
+      0,
+    );
+  } finally {
+    close();
+  }
+});

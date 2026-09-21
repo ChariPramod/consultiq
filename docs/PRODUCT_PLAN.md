@@ -18,6 +18,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | LangSmith | Basic run tracing implemented, optional, content excluded |
 | Customer organizations and billing | Pending |
 | Audio, transcription, real patient data | Pending and outside current ingestion scope |
+| Offline evaluation infrastructure | Implemented; supplied references required, no validated domain benchmark |
 | Predictive outcome models and model-quality benchmarks | Pending; no performance claims |
 
 ## Why build on this code
@@ -50,3 +51,5 @@ Measure retrieval failures before adding infrastructure. A sensible next increme
 ## Release decision
 
 Do not call the product commercially ready because the build passes. A release needs evidence that target users can complete the workflow, that evaluations meet the agreed bar, and that access, operations, support, and data obligations match the customer contract. This repository provides the implemented foundation and a concrete path to that decision.
+
+The active implementation sequence and completion evidence are tracked in [Iteration plan](ITERATION_PLAN.md).

@@ -7,6 +7,7 @@ import {
   type KnowledgeDocument,
   type WorkspaceData,
   type Coaching,
+  type Citation,
 } from '../lib/product.ts';
 import {
   prepareAssessment,
@@ -526,14 +527,26 @@ export class Repository {
     callId: string,
     question: string,
     answer: string,
-    citations: unknown,
+    citations: Citation[],
     model: string,
+    sources: Pick<Citation, 'chunk_id' | 'document_id'>[] = citations,
   ) {
-    await this.getCall(callId);
+    if (!citations.length || !sources.length)
+      throw new AppError(
+        422,
+        'unsupported_coaching',
+        'No supported coaching answer was returned.',
+      );
+    // Check every passage given to the model, even if the answer does not cite it.
+    // The existence checks and insert share one statement, closing the deletion race.
+    const sourceChecks = [...sources, ...citations].map(
+      () =>
+        'EXISTS (SELECT 1 FROM knowledge_chunks k JOIN knowledge_documents d ON d.id=k.document_id AND d.workspace_id=k.workspace_id WHERE k.id=? AND k.document_id=? AND k.workspace_id=?)',
+    );
     const runId = id();
-    await this.db.batch([
+    const [saved] = await this.db.batch([
       this.statement(
-        'INSERT INTO coaching_runs (id,workspace_id,call_id,question,answer,citations,model,prompt_version,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+        `INSERT INTO coaching_runs (id,workspace_id,call_id,question,answer,citations,model,prompt_version,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND ${sourceChecks.join(' AND ')}`,
         runId,
         this.workspaceId,
         callId,
@@ -543,9 +556,30 @@ export class Repository {
         model,
         'grounded-coaching/v1',
         now(),
+        callId,
+        this.workspaceId,
+        ...[...sources, ...citations].flatMap((source) => [
+          source.chunk_id,
+          source.document_id,
+          this.workspaceId,
+        ]),
       ),
-      this.event('coaching_saved', runId),
+      this.statement(
+        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) SELECT ?,?,'coaching_saved',?,? WHERE EXISTS (SELECT 1 FROM coaching_runs WHERE id=? AND workspace_id=?)",
+        id(),
+        this.workspaceId,
+        runId,
+        now(),
+        runId,
+        this.workspaceId,
+      ),
     ]);
+    if (!saved.meta.changes)
+      throw new AppError(
+        409,
+        'coaching_context_changed',
+        'The consultation or source material changed while coaching was generated. No answer was saved. Refresh before trying again.',
+      );
     return { id: runId, question, answer, citations, model };
   }
   async renameWorkspace(name: unknown) {

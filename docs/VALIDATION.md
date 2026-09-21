@@ -15,3 +15,7 @@ There is no model benchmark, held-out evaluation result, acceptance prediction, 
 ## Dependency review
 
 The dependency audit at implementation completion reported no advisories in production dependencies (`npm audit --omit=dev`). Development tooling still reports advisories through Drizzle Kit's legacy esbuild loader and Miniflare's sharp dependency. The latest compatible Wrangler, Cloudflare plugin and Vite releases were installed; the audit's suggested forced downgrades were not applied. These tools are not packaged as application runtime dependencies. Avoid exposing development tooling to untrusted traffic, and revisit upstream fixes before the next release.
+
+## Iteration A additions
+
+Regressions now cover deletion of cited and uncited source passages during generation, deletion of the consultation during generation, and foreign source identities at coaching persistence. Provider-adapter tests inject HTTP responses for streaming limits, transport/body failures, non-success statuses and invalid envelopes. Offline evaluator tests check abstention-aware denominators, shared quote validation, malformed inputs, reproducibility and report-content exclusions. These tests use engineering inputs, not dental quality labels. No successful live inference or trace delivery was established by this iteration.
