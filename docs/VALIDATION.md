@@ -25,3 +25,9 @@ Regressions now cover deletion of cited and uncited source passages during gener
 Added regression coverage for successful and failed run measurements, missing or malformed usage, nullable legacy jobs, and workspace-scoped measurement access. Provider usage is supplied through controlled adapter responses; tests do not establish real API latency or model quality. A generated additive migration preserves existing records with null telemetry.
 
 Local verification on 2026-09-20: all 38 tests, TypeScript, lint and production build passed through `npm run check`; the local migration runner confirmed no outstanding migrations. Independent code review found no blocking issues. This increment has not been deployed to the hosted workspace or verified with a live provider or browser.
+
+## Nested tracing increment
+
+Local verification on 2026-09-20: all 45 tests, TypeScript, lint and production build passed through `npm run check`. Seven tracing regressions cover hierarchy, empty content payloads, fixed failure codes, model-success/validation-failure attribution, disabled and invalid configuration, delivery/finalization failure isolation, and a hung delivery deadline. The HTTP adapter is tested with controlled responses and makes no automatic retry. Independent review found no blocking issues.
+
+No schema migration was required. No live service request, hosted deployment or browser verification was performed for this backend increment. The credential-dependent checks and remaining operational limits are documented in [Tracing](TRACING.md).

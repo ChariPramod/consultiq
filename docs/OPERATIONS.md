@@ -28,7 +28,11 @@ Publish an approved rubric. Import a role-play, select **Run AI assessment**, th
 
 Create a project, select the account region, and configure the settings above. Supported endpoints are `https://api.smith.langchain.com` and `https://eu.api.smith.langchain.com`. Enable tracing and run an assessment or coaching request.
 
-Locate the `assess_consultation` or `grounded_coaching` run and match its `job_id` to the application job. Verify timing and errors, and confirm transcript, prompt, question, source and result content are absent from trace inputs and outputs. Inputs and outputs are always hidden by this implementation; there is no UI switch to upload them. Basic tracing does not include token/cost reporting or nested pipeline stages.
+Locate the `assess_consultation` or `grounded_coaching` run and match its `job_id` to the application job. Expand its `model_response` and, when reached, `validation_save` children. Confirm their ordering and inspect a controlled failure. A model failure should have no validation stage; a validation failure should leave a failed validation child and parent.
+
+Confirm transcript, prompt, question, source and result content are absent from inputs, outputs and errors. Error fields contain fixed application codes, never raw exception messages or stacks. There is no UI switch to upload content. Token counts are available in application job history; LangSmith cost reporting and retrieval spans remain unimplemented.
+
+Trace delivery is best effort with a five-second wait budget and no automatic delivery retries. A delivery failure logs only `tracing_delivery_failed` and the job ID, and does not change the analysis result. This is not a durable telemetry outbox: a process interruption or delivery outage can lose traces. Invalid endpoint configuration is rejected before model invocation. See [trace validation](TRACING.md) for the engineering checks and remaining live verification.
 
 See the official [instrumentation guide](https://docs.langchain.com/langsmith/annotate-code) and [sensitive-data controls](https://docs.langchain.com/langsmith/mask-inputs-outputs). Live delivery must be verified with owner credentials before treating tracing as operational.
 

@@ -29,7 +29,8 @@ flowchart LR
 | `lib/evidence.ts`, `lib/assessment.ts` | Deterministic quote checks and supported-score rules |
 | `server/handler.ts` | HTTP authentication, origin checks, body limits and routing |
 | `server/repository.ts` | Workspace-scoped persistence and state transitions |
-| `server/ai.ts` | Assessment, RAG and optional tracing |
+| `server/ai.ts` | Assessment and RAG orchestration |
+| `server/observability.ts` | Content-free nested tracing and isolated trace delivery |
 | `server/model.ts` | Configured provider HTTP adapter, bounded response reads and sanitized failures |
 | `lib/evaluation.ts`, `scripts/evaluate.mjs` | Offline aggregate comparison against independent reference scores |
 | `db/schema.ts`, `drizzle/` | Database definition and generated migration history |
@@ -74,7 +75,9 @@ Analysis runs during the HTTP request. A job record captures running, completed,
 
 ## Observability
 
-Optional LangSmith instrumentation wraps assessment and coaching runs. Traces include run name, job ID, model, timing and errors; input/output content is hidden in the client before upload. Trace delivery is flushed before the request finishes. This release does not provide nested retrieval/model/validation spans, token cost accounting, evaluation datasets or automatic feedback synchronization. Application job history remains available without LangSmith.
+Optional LangSmith instrumentation records assessment and coaching runs with nested `model_response` and `validation_save` stages. Traces carry job ID, configured model, timings and allowlisted failure codes. Inputs and outputs are empty; raw exception messages and stacks are never passed to the trace client. Completed spans are delivered after the analysis callback, with a bounded wait. Delivery failure does not replace the saved result or the original analysis error, and never retries the analysis. Invalid trace endpoint configuration still fails before model invocation.
+
+Retrieval remains outside the admitted analysis interval and is not traced by this increment. Token counts remain in application job history; this integration does not provide LangSmith token/cost accounting, evaluation datasets or automatic feedback synchronization. Application job history remains available without LangSmith.
 
 The instrumentation uses LangSmith's [custom tracing](https://docs.langchain.com/langsmith/annotate-code) and [input/output masking](https://docs.langchain.com/langsmith/mask-inputs-outputs). Masking trace payloads does not stop the model provider receiving transcript and source content needed for generation.
 

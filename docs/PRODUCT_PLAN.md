@@ -15,7 +15,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | Automated assessment | Implemented; provider credentials and approved rubric required |
 | Evidence validation | Implemented; invalid quote support cannot retain a numeric score |
 | RAG coaching | Implemented with approved-document keyword retrieval and checked citations |
-| LangSmith | Basic run tracing implemented, optional, content excluded |
+| LangSmith | Nested model and validation/save tracing implemented, optional, content excluded |
 | Customer organizations and billing | Pending |
 | Audio, transcription, real patient data | Pending and outside current ingestion scope |
 | Offline evaluation infrastructure | Implemented; supplied references required, no validated domain benchmark |

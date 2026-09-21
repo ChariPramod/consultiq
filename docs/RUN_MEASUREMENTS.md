@@ -41,4 +41,6 @@ To verify real operation with approved role-plays, configure the provider, publi
 
 ## Next work
 
-Add separate retrieval and queue timings when those stages move inside the durable job lifecycle, model/prompt provenance on every attempt, cache-aware usage accounting, and nested trace spans. Use the offline evaluator alongside measurements when comparing models; a faster invalid answer is not a successful optimization.
+Add separate retrieval and queue timings when those stages move inside the durable job lifecycle, model/prompt provenance on every attempt, cache-aware usage accounting, and retrieval trace spans. Use the offline evaluator alongside measurements when comparing models; a faster invalid answer is not a successful optimization.
+
+Nested model and validation/save traces are now implemented separately; see [Tracing](TRACING.md). They do not change the persisted measurement definitions above.

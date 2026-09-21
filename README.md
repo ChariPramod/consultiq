@@ -33,7 +33,7 @@ This runs automated tests, TypeScript, lint, and the production build. Generate 
 - Optional server-side Claude analysis, tracked analysis jobs, and daily request limits.
 - Saved analysis timings and reported input/output tokens, including available usage on failures.
 - Approved document ingestion, keyword retrieval, and citation-validated RAG coaching.
-- Optional LangSmith run tracing with inputs and outputs excluded.
+- Optional LangSmith tracing with separate model and validation/save stages; content and raw errors excluded.
 - Offline assessment evaluation against independently supplied references, with coverage and abstention reporting.
 
 There are no seeded customer records, fabricated performance metrics, or acceptance predictions. AI controls remain unavailable until configured. Real patient recordings, team invitations, billing, semantic vector retrieval, and validated model-quality benchmarks are not implemented.
@@ -51,6 +51,7 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 - [Current iteration plan](docs/ITERATION_PLAN.md)
 - [Offline evaluation](docs/EVALUATION.md)
 - [Analysis run measurements](docs/RUN_MEASUREMENTS.md)
+- [Nested tracing and live verification](docs/TRACING.md)
 - [Data, cloud, market research and next build](docs/DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md)
 - [Your actions and decisions](docs/OWNER_ACTIONS.md)
 - [Product direction and release gates](docs/PRODUCT_PLAN.md)
