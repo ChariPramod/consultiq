@@ -19,3 +19,9 @@ The dependency audit at implementation completion reported no advisories in prod
 ## Iteration A additions
 
 Regressions now cover deletion of cited and uncited source passages during generation, deletion of the consultation during generation, and foreign source identities at coaching persistence. Provider-adapter tests inject HTTP responses for streaming limits, transport/body failures, non-success statuses and invalid envelopes. Offline evaluator tests check abstention-aware denominators, shared quote validation, malformed inputs, reproducibility and report-content exclusions. These tests use engineering inputs, not dental quality labels. No successful live inference or trace delivery was established by this iteration.
+
+## Run measurement increment
+
+Added regression coverage for successful and failed run measurements, missing or malformed usage, nullable legacy jobs, and workspace-scoped measurement access. Provider usage is supplied through controlled adapter responses; tests do not establish real API latency or model quality. A generated additive migration preserves existing records with null telemetry.
+
+Local verification on 2026-09-20: all 38 tests, TypeScript, lint and production build passed through `npm run check`; the local migration runner confirmed no outstanding migrations. Independent code review found no blocking issues. This increment has not been deployed to the hosted workspace or verified with a live provider or browser.

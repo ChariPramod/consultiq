@@ -67,6 +67,14 @@ export type KnowledgeDocument = {
   body: string;
   created_at: string;
 };
+export type RunTelemetry = {
+  schema_version: 1;
+  total_ms: number;
+  model_ms: number | null;
+  validation_save_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+};
 export type WorkspaceData = {
   workspace: { id: string; name: string };
   calls: CallRecord[];
@@ -80,6 +88,7 @@ export type WorkspaceData = {
     kind: string;
     call_id: string;
     error_code: string | null;
+    telemetry: RunTelemetry | null;
     created_at: string;
   }[];
 };

@@ -588,7 +588,9 @@ export function WorkspaceSettings({
         <div className="product-panel-heading">
           <div>
             <h2>Recent analysis runs</h2>
-            <p>Processing status for scoring and coaching requests.</p>
+            <p>
+              Processing status, measured duration and reported token usage.
+            </p>
           </div>
           <History size={20} />
         </div>
@@ -596,7 +598,7 @@ export function WorkspaceSettings({
           <div className="run-list">
             {data.jobs.map((job) => (
               <div key={job.id}>
-                <div>
+                <div className="run-information">
                   <strong>
                     {job.kind === 'scoring'
                       ? 'Rubric assessment'
@@ -608,6 +610,43 @@ export function WorkspaceSettings({
                       ? ` · ${job.error_code.replaceAll('_', ' ')}`
                       : ''}
                   </small>
+                  <span className="run-id">Run {job.id}</span>
+                  {job.telemetry ? (
+                    <dl className="run-metrics">
+                      <div>
+                        <dt>Analysis</dt>
+                        <dd>{runDuration(job.telemetry.total_ms)}</dd>
+                      </div>
+                      <div>
+                        <dt>Model response</dt>
+                        <dd>{runDuration(job.telemetry.model_ms)}</dd>
+                      </div>
+                      <div>
+                        <dt>Validation & save</dt>
+                        <dd>{runDuration(job.telemetry.validation_save_ms)}</dd>
+                      </div>
+                      <div>
+                        <dt>Input tokens (uncached)</dt>
+                        <dd>
+                          {job.telemetry.input_tokens?.toLocaleString() ??
+                            'Not reported'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Output tokens</dt>
+                        <dd>
+                          {job.telemetry.output_tokens?.toLocaleString() ??
+                            'Not reported'}
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <p className="run-measurement-note">
+                      {job.status === 'running'
+                        ? 'Measurements available after completion.'
+                        : 'Measurements were not recorded for this run.'}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={`product-status ${job.status === 'completed' ? 'approved' : job.status === 'failed' ? 'failed' : ''}`}
@@ -621,6 +660,13 @@ export function WorkspaceSettings({
           <p className="settings-empty">
             Analysis runs will appear here after automated scoring or coaching
             is enabled.
+          </p>
+        )}
+        {data.jobs.length > 0 && (
+          <p className="run-measurement-note">
+            Analysis time excludes initial loading, source retrieval, trace
+            delivery and final job recording. Tokens are provider-reported
+            counts, not a bill. Unknown usage is never counted as zero.
           </p>
         )}
       </section>
@@ -637,4 +683,11 @@ export function WorkspaceSettings({
       </section>
     </div>
   );
+}
+
+function runDuration(ms: number | null) {
+  if (ms === null) return 'Not recorded';
+  if (ms < 1) return '<1 ms';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
 }

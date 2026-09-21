@@ -1,3 +1,4 @@
+import type { AnalysisTelemetry } from './telemetry.ts';
 import {
   parseTurns,
   validateRubric,
@@ -160,9 +161,13 @@ export class Repository {
           this.workspaceId,
         ).all<KnowledgeDocument>(),
         this.statement(
-          'SELECT id,call_id,kind,status,error_code,created_at FROM analysis_jobs WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 20',
+          'SELECT id,call_id,kind,status,error_code,created_at,telemetry_json FROM analysis_jobs WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 20',
           this.workspaceId,
-        ).all<WorkspaceData['jobs'][number]>(),
+        ).all<
+          Omit<WorkspaceData['jobs'][number], 'telemetry'> & {
+            telemetry_json: string | null;
+          }
+        >(),
       ],
     );
     const assessmentRows = await this.statement(
@@ -185,7 +190,12 @@ export class Repository {
       total: total?.count ?? 0,
       rubric,
       documents: documents.results,
-      jobs: jobs.results,
+      jobs: jobs.results.map(({ telemetry_json, ...job }) => ({
+        ...job,
+        telemetry: telemetry_json
+          ? (JSON.parse(telemetry_json) as AnalysisTelemetry)
+          : null,
+      })),
     };
   }
   async createCall(input: unknown) {
@@ -513,12 +523,17 @@ export class Repository {
       );
     return jobId;
   }
-  async finishJob(jobId: string, error?: string) {
+  async finishJob(
+    jobId: string,
+    error?: string,
+    telemetry?: AnalysisTelemetry,
+  ) {
     await this.statement(
-      'UPDATE analysis_jobs SET status=?,error_code=?,finished_at=? WHERE id=? AND workspace_id=?',
+      'UPDATE analysis_jobs SET status=?,error_code=?,finished_at=?,telemetry_json=? WHERE id=? AND workspace_id=?',
       error ? 'failed' : 'completed',
       error ?? null,
       now(),
+      telemetry ? JSON.stringify(telemetry) : null,
       jobId,
       this.workspaceId,
     ).run();

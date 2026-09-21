@@ -85,3 +85,7 @@ The evaluator calls the same assessment preparation and quote validation used by
 ## Provider response handling
 
 The provider adapter reads response chunks under a byte limit instead of buffering an arbitrary response before checking its length. Failed HTTP response bodies are cancelled without exposing their content. Network failures, incomplete body streams and malformed or truncated model envelopes produce sanitized errors. Requests retain the configured timeout; no automatic paid retry was added.
+
+## Persisted analysis measurements
+
+Analysis jobs now have nullable, versioned measurement data: total analysis duration, model-adapter duration, validation/save duration and provider-reported uncached input/output token counts. The workspace settings display these values for recent runs. Missing values remain null, including old jobs and failures before usage is reported. Timings exclude preflight/source retrieval, trace flushing and the final job update. These are not full-request latency or a billing ledger. See [Run measurements](RUN_MEASUREMENTS.md) for boundaries and migration requirements.

@@ -127,6 +127,7 @@ export const jobs = sqliteTable(
     kind: text('kind').notNull(),
     status: text('status').notNull(),
     errorCode: text('error_code'),
+    telemetry: text('telemetry_json'),
     createdAt: text('created_at').notNull(),
     finishedAt: text('finished_at'),
   },

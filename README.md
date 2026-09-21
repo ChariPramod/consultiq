@@ -31,6 +31,7 @@ This runs automated tests, TypeScript, lint, and the production build. Generate 
 - Owner-approved rubric versions and append-only assessment revisions.
 - Quote validation against the cited transcript turn; unsupported scores remain unscored.
 - Optional server-side Claude analysis, tracked analysis jobs, and daily request limits.
+- Saved analysis timings and reported input/output tokens, including available usage on failures.
 - Approved document ingestion, keyword retrieval, and citation-validated RAG coaching.
 - Optional LangSmith run tracing with inputs and outputs excluded.
 - Offline assessment evaluation against independently supplied references, with coverage and abstention reporting.
@@ -49,6 +50,7 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 
 - [Current iteration plan](docs/ITERATION_PLAN.md)
 - [Offline evaluation](docs/EVALUATION.md)
+- [Analysis run measurements](docs/RUN_MEASUREMENTS.md)
 - [Data, cloud, market research and next build](docs/DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md)
 - [Your actions and decisions](docs/OWNER_ACTIONS.md)
 - [Product direction and release gates](docs/PRODUCT_PLAN.md)

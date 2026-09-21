@@ -339,15 +339,18 @@ test('grounded coaching persists only when its citations match retrieved sources
       'POST',
       { question: 'How should I confirm follow-up?' },
       'owner-a',
-      async (_system, input) => ({
-        answer: 'Confirm the date and name the owner.',
-        citations: [
-          {
-            chunk_id: input.sources[0].chunk_id,
-            span: 'Confirm the follow-up date',
-          },
-        ],
-      }),
+      async (_system, input, onUsage) => {
+        onUsage({ input_tokens: 101, output_tokens: 31 });
+        return {
+          answer: 'Confirm the date and name the owner.',
+          citations: [
+            {
+              chunk_id: input.sources[0].chunk_id,
+              span: 'Confirm the follow-up date',
+            },
+          ],
+        };
+      },
       env,
     );
     assert.equal(good.status, 201);
@@ -357,13 +360,28 @@ test('grounded coaching persists only when its citations match retrieved sources
       'POST',
       { question: 'How should I confirm follow-up?' },
       'owner-a',
-      async () => ({
-        answer: 'Unsupported advice.',
-        citations: [{ chunk_id: 'invented', span: 'Invented guidance' }],
-      }),
+      async (_system, _input, onUsage) => {
+        onUsage({ input_tokens: 102, output_tokens: 32 });
+        return {
+          answer: 'Unsupported advice.',
+          citations: [{ chunk_id: 'invented', span: 'Invented guidance' }],
+        };
+      },
       env,
     );
     assert.equal(bad.status, 422);
+    const jobs = (await call(db, 'workspace')).data.jobs;
+    for (const [status, inputTokens, outputTokens] of [
+      ['completed', 101, 31],
+      ['failed', 102, 32],
+    ]) {
+      const job = jobs.find((j) => j.status === status);
+      assert.equal(job.kind, 'coaching');
+      assert.equal(job.telemetry.input_tokens, inputTokens);
+      assert.equal(job.telemetry.output_tokens, outputTokens);
+      assert.ok(Number.isFinite(job.telemetry.model_ms));
+      assert.ok(Number.isFinite(job.telemetry.validation_save_ms));
+    }
     assert.equal(
       (await call(db, `consultations/${c.id}`)).data.coaching.length,
       1,
@@ -600,6 +618,111 @@ test('coaching persistence rejects another workspace’s consultation and source
         .total,
       0,
     );
+  } finally {
+    close();
+  }
+});
+
+test('persisted telemetry distinguishes provider, validation and unknown usage on both success and failure', async () => {
+  const { db, close } = setup();
+  try {
+    await call(db, 'rubrics', 'POST', {
+      title: 'Review standard',
+      definitions,
+      approved: true,
+    });
+    const config = { ANTHROPIC_API_KEY: 'test-only', AI_MODEL: 'test-model' };
+    for (const scenario of ['success', 'invalid', 'transport', 'unreported']) {
+      const c = (await call(db, 'consultations', 'POST', input)).data;
+      const invoke = async (_system, _input, onUsage) => {
+        if (scenario === 'transport') throw new Error('private transport text');
+        if (scenario !== 'unreported')
+          onUsage({ input_tokens: 123, output_tokens: 45 });
+        return scenario === 'invalid' ? { invalid: true } : { dimensions };
+      };
+      const result = await call(
+        db,
+        `consultations/${c.id}/score`,
+        'POST',
+        {},
+        'owner-a',
+        invoke,
+        config,
+      );
+      assert.equal(
+        result.status,
+        scenario === 'success' || scenario === 'unreported'
+          ? 201
+          : scenario === 'transport'
+            ? 500
+            : 502,
+      );
+      const workspace = (await call(db, 'workspace')).data;
+      const job = workspace.jobs.find((j) => j.call_id === c.id);
+      const t = job.telemetry;
+      assert.equal(t.schema_version, 1);
+      assert.ok(Number.isFinite(t.total_ms) && t.total_ms >= 0);
+      assert.ok(Number.isFinite(t.model_ms) && t.model_ms >= 0);
+      assert.ok(t.total_ms >= t.model_ms);
+      if (scenario === 'transport') assert.equal(t.validation_save_ms, null);
+      else {
+        assert.ok(
+          Number.isFinite(t.validation_save_ms) && t.validation_save_ms >= 0,
+        );
+        assert.ok(t.total_ms >= t.model_ms + t.validation_save_ms);
+      }
+      assert.equal(
+        t.input_tokens,
+        scenario === 'transport' || scenario === 'unreported' ? null : 123,
+      );
+      assert.equal(
+        t.output_tokens,
+        scenario === 'transport' || scenario === 'unreported' ? null : 45,
+      );
+      assert.deepEqual(
+        Object.keys(t).sort(),
+        [
+          'schema_version',
+          'total_ms',
+          'model_ms',
+          'validation_save_ms',
+          'input_tokens',
+          'output_tokens',
+        ].sort(),
+      );
+      assert.equal(JSON.stringify(t).includes('private'), false);
+    }
+    assert.deepEqual(
+      (await call(db, 'workspace', 'GET', undefined, 'owner-b')).data.jobs,
+      [],
+    );
+  } finally {
+    close();
+  }
+});
+
+test('legacy job telemetry remains null and another workspace cannot update job telemetry', async () => {
+  const { db, close } = setup();
+  try {
+    const c = (await call(db, 'consultations', 'POST', input)).data;
+    const owner = await Repository.forUser(db, 'owner-a');
+    const other = await Repository.forUser(db, 'owner-b');
+    const id = await owner.beginJob(c.id, 'scoring', 30);
+    await other.finishJob(id, undefined, {
+      schema_version: 1,
+      total_ms: 1,
+      model_ms: 1,
+      validation_save_ms: null,
+      input_tokens: 2,
+      output_tokens: 3,
+    });
+    let job = (await call(db, 'workspace')).data.jobs[0];
+    assert.equal(job.status, 'running');
+    assert.equal(job.telemetry, null);
+    await owner.finishJob(id);
+    job = (await call(db, 'workspace')).data.jobs[0];
+    assert.equal(job.status, 'completed');
+    assert.equal(job.telemetry, null);
   } finally {
     close();
   }

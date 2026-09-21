@@ -20,6 +20,10 @@ Verification: API race tests, provider-adapter tests and evaluator tests passed;
 
 ## Iteration B: observed live analysis
 
+Status: persistent run measurements implemented; live verification and nested spans pending.
+
+The current increment adds private per-run timings and provider-reported uncached input/output counts, displayed in workspace settings. Failed requests preserve counts when available; old or unobserved values remain unknown. The additive migration and measurement boundaries are documented in [Run measurements](RUN_MEASUREMENTS.md).
+
 Add nested stage timings, provider usage accounting and a bounded live smoke workflow on approved role-plays. Link run IDs to review provenance and export an evaluation comparison tied to model, prompt, rubric and dataset versions.
 
 Dependency: owner API configuration and independently reviewed examples for actual quality results. Engineering can prepare telemetry contracts first. Do not invent reference scores or treat engineering fixtures as a dental benchmark.

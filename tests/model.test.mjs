@@ -116,3 +116,53 @@ test('incomplete and malformed provider output never becomes a result', async ()
     );
   }
 });
+
+test('usage is reported before invalid generated content is rejected', async () => {
+  for (const payload of [
+    envelope(),
+    envelope('{invalid'),
+    { ...envelope(), stop_reason: 'max_tokens' },
+  ]) {
+    let usage;
+    const invoke = modelClient(config, async () =>
+      Response.json({
+        ...payload,
+        usage: { input_tokens: 123, output_tokens: 45 },
+      }),
+    );
+    try {
+      await invoke('system', {}, (value) => {
+        usage = value;
+      });
+    } catch (error) {
+      assert.equal(error.code, 'provider_output_invalid');
+    }
+    assert.deepEqual(usage, { input_tokens: 123, output_tokens: 45 });
+  }
+});
+
+test('absent or invalid usage stays unknown and legitimate zero stays zero', async () => {
+  for (const [reported, expected] of [
+    [undefined, { input_tokens: null, output_tokens: null }],
+    [
+      { input_tokens: '12', output_tokens: -1 },
+      { input_tokens: null, output_tokens: null },
+    ],
+    [
+      { input_tokens: 1.5, output_tokens: 1e30 },
+      { input_tokens: null, output_tokens: null },
+    ],
+    [
+      { input_tokens: 0, output_tokens: 7 },
+      { input_tokens: 0, output_tokens: 7 },
+    ],
+  ]) {
+    let usage;
+    await modelClient(config, async () =>
+      Response.json({ ...envelope(), usage: reported }),
+    )('system', {}, (value) => {
+      usage = value;
+    });
+    assert.deepEqual(usage, expected);
+  }
+});

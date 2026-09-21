@@ -1,0 +1,1 @@
+ALTER TABLE `analysis_jobs` ADD `telemetry_json` text;

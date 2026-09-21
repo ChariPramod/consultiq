@@ -1,11 +1,24 @@
 import { AppError } from './repository.ts';
 import { configuration, type RuntimeConfig } from './config.ts';
-export type ModelCall = (system: string, input: unknown) => Promise<unknown>;
+export type ModelUsage = {
+  input_tokens: number | null;
+  output_tokens: number | null;
+};
+export type ModelCall = (
+  system: string,
+  input: unknown,
+  onUsage?: (usage: ModelUsage) => void,
+) => Promise<unknown>;
+function tokenCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
+}
 export function modelClient(
   env: RuntimeConfig,
   send: typeof fetch = fetch,
 ): ModelCall {
-  return async (system, input) => {
+  return async (system, input, onUsage) => {
     if (!configuration(env).scoring)
       throw new AppError(
         503,
@@ -48,8 +61,13 @@ export function modelClient(
     try {
       const body = JSON.parse(raw) as {
         stop_reason: string;
+        usage?: { input_tokens?: unknown; output_tokens?: unknown };
         content: { type: string; text?: string }[];
       };
+      onUsage?.({
+        input_tokens: tokenCount(body?.usage?.input_tokens),
+        output_tokens: tokenCount(body?.usage?.output_tokens),
+      });
       if (body.stop_reason !== 'end_turn')
         throw new Error('Incomplete response');
       const text = body.content
