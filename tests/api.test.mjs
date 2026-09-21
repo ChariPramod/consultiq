@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { handleApi } from '../server/handler.ts';
 import { Repository } from '../server/repository.ts';
 function setup() {
+  let failPattern;
   const sql = new DatabaseSync(':memory:');
   sql.exec('PRAGMA foreign_keys=ON');
   for (const file of readdirSync('drizzle')
@@ -27,6 +28,10 @@ function setup() {
           return { results: prepared.all(...parameters) };
         },
         async run() {
+          if (failPattern?.test(query)) {
+            failPattern = undefined;
+            throw new Error('injected storage failure');
+          }
           const result = prepared.run(...parameters);
           return { meta: { changes: Number(result.changes) } };
         },
@@ -45,7 +50,13 @@ function setup() {
       }
     },
   };
-  return { db, close: () => sql.close() };
+  return {
+    db,
+    failNext: (pattern) => {
+      failPattern = pattern;
+    },
+    close: () => sql.close(),
+  };
 }
 const input = {
   title: 'Follow-up role-play',
@@ -885,3 +896,121 @@ test('AI persistence requires a running job for the same workspace, consultation
     close();
   }
 });
+
+for (const kind of ['scoring', 'coaching']) {
+  for (const failure of ['completion', 'audit', 'telemetry']) {
+    test(`${kind}: ${failure} failure preserves transaction semantics`, async (t) => {
+      const { db, close, failNext } = setup();
+      t.mock.method(console, 'warn', () => {});
+      try {
+        const repo = await Repository.forUser(db, 'owner-a');
+        const c = await repo.createCall(input);
+        await repo.publishRubric({
+          title: 'Test',
+          definitions,
+          approved: true,
+        });
+        await repo.addDocument({
+          title: 'Guide',
+          body: 'Confirm the follow-up date.',
+          approved: true,
+        });
+        const invoke = async (_system, payload) => {
+          failNext(
+            failure === 'completion'
+              ? /UPDATE analysis_jobs SET status='completed'/
+              : failure === 'audit'
+                ? /INSERT INTO audit_events/
+                : /UPDATE analysis_jobs SET telemetry_json=/,
+          );
+          return kind === 'scoring'
+            ? { dimensions }
+            : {
+                answer: 'Confirm the date.',
+                citations: [
+                  {
+                    chunk_id: payload.sources[0].chunk_id,
+                    span: 'Confirm the follow-up date.',
+                  },
+                ],
+              };
+        };
+        const response = await call(
+          db,
+          `consultations/${c.id}/${kind === 'scoring' ? 'score' : 'coaching'}`,
+          'POST',
+          { question: 'follow-up' },
+          'owner-a',
+          invoke,
+          { ANTHROPIC_API_KEY: 'test-only', AI_MODEL: 'test-model' },
+        );
+        assert.equal(response.status, failure === 'telemetry' ? 201 : 500);
+        const table = kind === 'scoring' ? 'assessments' : 'coaching_runs';
+        const expected = failure === 'telemetry' ? 1 : 0;
+        assert.equal(
+          (await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n,
+          expected,
+        );
+        assert.equal(
+          (
+            await db
+              .prepare(
+                "SELECT COUNT(*) AS n FROM audit_events WHERE action IN ('assessment_saved','coaching_saved')",
+              )
+              .first()
+          ).n,
+          expected,
+        );
+        const job = await db.prepare('SELECT * FROM analysis_jobs').first();
+        assert.equal(
+          job.status,
+          failure === 'telemetry' ? 'completed' : 'failed',
+        );
+        if (failure === 'telemetry') {
+          assert.equal(job.telemetry_json, null);
+          const other = await Repository.forUser(db, 'owner-b');
+          const measurement = {
+            schema_version: 1,
+            total_ms: 1,
+            model_ms: 1,
+            validation_save_ms: 0,
+            input_tokens: null,
+            output_tokens: null,
+          };
+          await other.recordCompletedTelemetry(job.id, measurement);
+          assert.equal(
+            (
+              await db
+                .prepare('SELECT telemetry_json FROM analysis_jobs')
+                .first()
+            ).telemetry_json,
+            null,
+          );
+          await repo.recordCompletedTelemetry(job.id, measurement);
+          await repo.recordCompletedTelemetry(job.id, {
+            ...measurement,
+            total_ms: 999,
+          });
+          assert.equal(
+            JSON.parse(
+              (
+                await db
+                  .prepare('SELECT telemetry_json FROM analysis_jobs')
+                  .first()
+              ).telemetry_json,
+            ).total_ms,
+            1,
+          );
+          await repo.finishJob(job.id, 'late_failure');
+          assert.equal(
+            (await db.prepare('SELECT status FROM analysis_jobs').first())
+              .status,
+            'completed',
+          );
+        }
+      } finally {
+        close();
+      }
+    });
+  }
+}

@@ -19,7 +19,7 @@ Older runs, interrupted processes and in-progress requests can lack measurements
 | `input_tokens` | Provider-reported uncached input token count, or null |
 | `output_tokens` | Provider-reported output token count, or null |
 
-Timers use a monotonic clock. The total excludes initial record/rubric loading, coaching source retrieval, trace flushing and the final job update. It is not end-to-end HTTP latency, first-token latency, or a voice turn metric. Stage durations are not a claim of model speed across representative workloads.
+Timers use a monotonic clock. The total excludes initial record/rubric loading, coaching source retrieval, trace flushing and the optional telemetry update. It is not end-to-end HTTP latency, first-token latency, or a voice turn metric. Stage durations are not a claim of model speed across representative workloads.
 
 Token fields are validated as nonnegative safe integers. The adapter observes usage before validating the generated answer, so an invalid or truncated answer can still retain reported usage. When the provider does not supply a usable envelope, counts remain unknown. No usage is estimated from text length.
 
@@ -44,3 +44,5 @@ To verify real operation with approved role-plays, configure the provider, publi
 Add separate retrieval and queue timings when those stages move inside the durable job lifecycle, model/prompt provenance on every attempt, cache-aware usage accounting, and retrieval trace spans. Use the offline evaluator alongside measurements when comparing models; a faster invalid answer is not a successful optimization.
 
 Nested model and validation/save traces are now implemented separately; see [Tracing](TRACING.md). They do not change the persisted measurement definitions above.
+
+Successful AI persistence now commits the result, audit event and completed job status in one transaction. The validation/save timing includes this transaction. Optional telemetry is saved afterward; storage failure can leave measurements unavailable without failing the saved result.

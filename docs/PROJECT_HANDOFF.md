@@ -21,7 +21,7 @@ Updated September 21, 2026. This document describes the implemented source, its 
 | Recovery protection | AI result insertion requires the matching active job; terminal job state cannot be overwritten by late completion | Synchronous execution remains; no durable queue or recovery worker yet |
 | Delivery | Private GitHub source and automated test/typecheck/lint/build workflow | CI validates source; it does not deploy the application |
 
-Earlier work closed coaching races involving deleted cited and uncited sources, added provider failure tests, and introduced the offline evaluator. Later increments added saved run measurements and nested tracing. This iteration prevents an interrupted request from returning late and saving an AI result or replacing its terminal job status.
+Earlier work closed coaching races involving deleted cited and uncited sources, added provider failure tests, and introduced the offline evaluator. Later increments added saved run measurements and nested tracing. The interrupted-attempt guard prevents late results after recovery. The latest iteration additionally commits results, audit events and job completion atomically and makes successful-run telemetry best effort.
 
 ## 2. What this iteration changes
 
@@ -35,7 +35,9 @@ No schema migration is needed for this change. The earlier nullable telemetry mi
 
 Stale jobs are marked interrupted opportunistically when a new run is admitted. Three minutes is the stale-record threshold, not a scheduler or guaranteed cancellation time. No provider request is retried automatically.
 
-Result persistence and final job completion are separate operations. A process can save a valid result while the job is active and then stop before recording completion. That can leave a result beside an interrupted job. The new guard prevents writes after interruption; it does not claim exactly-once processing or atomic result/job completion. Assessment audit insertion also remains separate from its result insertion.
+Result persistence, successful-save audit and completed job status now commit in one database transaction. An audit or completion write failure rolls back the result as well. Optional telemetry is written afterward and can be missing without changing the completed status. Assessment responses use the committed values instead of requiring a second database read.
+
+A provider can still finish billable work before a process fails to save its response. There is no automatic retry, durable delivery or exactly-once provider execution. A lost HTTP response also leaves the caller uncertain; refresh the workspace to inspect saved results before requesting another analysis.
 
 ## 3. Your next actions, in priority order
 

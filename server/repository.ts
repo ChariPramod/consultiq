@@ -340,27 +340,49 @@ export class Repository {
       );
     }
     const assessmentId = id();
-    const result = await this.statement(
-      `INSERT INTO assessments (id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND COALESCE((SELECT id FROM assessments WHERE call_id=? AND workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1),'')=? AND (?='human' OR EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='scoring' AND status='running'))`,
-      assessmentId,
-      this.workspaceId,
-      callId,
-      rubricId,
-      kind,
-      JSON.stringify(content),
-      promptVersion,
-      model,
-      now(),
-      callId,
-      this.workspaceId,
-      callId,
-      this.workspaceId,
-      base,
-      kind,
-      jobId ?? '',
-      this.workspaceId,
-      callId,
-    ).run();
+    const createdAt = now();
+    const [result] = await this.db.batch([
+      this.statement(
+        `INSERT INTO assessments (id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND COALESCE((SELECT id FROM assessments WHERE call_id=? AND workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1),'')=? AND (?='human' OR EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='scoring' AND status='running'))`,
+        assessmentId,
+        this.workspaceId,
+        callId,
+        rubricId,
+        kind,
+        JSON.stringify(content),
+        promptVersion,
+        model,
+        createdAt,
+        callId,
+        this.workspaceId,
+        callId,
+        this.workspaceId,
+        base,
+        kind,
+        jobId ?? '',
+        this.workspaceId,
+        callId,
+      ),
+      this.statement(
+        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) SELECT ?,?,'assessment_saved',?,? WHERE EXISTS (SELECT 1 FROM assessments WHERE id=? AND workspace_id=?)",
+        id(),
+        this.workspaceId,
+        assessmentId,
+        now(),
+        assessmentId,
+        this.workspaceId,
+      ),
+      ...(kind === 'ai'
+        ? [
+            this.completeWithResult(
+              jobId ?? '',
+              callId,
+              'scoring',
+              assessmentId,
+            ),
+          ]
+        : []),
+    ]);
     if (!result.meta.changes)
       throw new AppError(
         409,
@@ -376,10 +398,16 @@ export class Repository {
           ...rejection,
         }),
       );
-    await this.event('assessment_saved', assessmentId).run();
-    return (await this.assessmentList(callId)).find(
-      (a) => a.id === assessmentId,
-    )!;
+    return {
+      id: assessmentId,
+      call_id: callId,
+      rubric_id: rubricId,
+      kind,
+      content,
+      prompt_version: promptVersion,
+      model,
+      created_at: createdAt,
+    } satisfies SavedAssessment;
   }
   async addDocument(input: unknown) {
     const data = object(input);
@@ -528,6 +556,40 @@ export class Repository {
       );
     return jobId;
   }
+  private completeWithResult(
+    jobId: string,
+    callId: string,
+    kind: 'scoring' | 'coaching',
+    resultId: string,
+  ) {
+    const table = kind === 'scoring' ? 'assessments' : 'coaching_runs';
+    return this.statement(
+      `UPDATE analysis_jobs SET status='completed',error_code=NULL,finished_at=? WHERE id=? AND workspace_id=? AND call_id=? AND kind=? AND status='running' AND EXISTS (SELECT 1 FROM ${table} WHERE id=? AND workspace_id=? AND call_id=?)`,
+      now(),
+      jobId,
+      this.workspaceId,
+      callId,
+      kind,
+      resultId,
+      this.workspaceId,
+      callId,
+    );
+  }
+  async recordCompletedTelemetry(jobId: string, telemetry: AnalysisTelemetry) {
+    // Optional measurements must not turn a committed result into a failed run.
+    try {
+      await this.statement(
+        "UPDATE analysis_jobs SET telemetry_json=? WHERE id=? AND workspace_id=? AND status='completed' AND telemetry_json IS NULL",
+        JSON.stringify(telemetry),
+        jobId,
+        this.workspaceId,
+      ).run();
+    } catch {
+      console.warn(
+        JSON.stringify({ event: 'telemetry_save_failed', job_id: jobId }),
+      );
+    }
+  }
   async finishJob(
     jobId: string,
     error?: string,
@@ -597,6 +659,7 @@ export class Repository {
         runId,
         this.workspaceId,
       ),
+      this.completeWithResult(jobId ?? '', callId, 'coaching', runId),
     ]);
     if (!saved.meta.changes)
       throw new AppError(

@@ -34,7 +34,7 @@ The tracing increment adds separate model and validation/save spans, empty conte
 
 ## Iteration C: recoverable processing
 
-First prerequisite implemented: reject late AI results after job interruption and preserve terminal job state. This is an active-job persistence guard, not a durable queue. Full background processing remains pending.
+First prerequisite implemented: reject late AI results after job interruption and preserve terminal job state. This is an active-job persistence guard, not a durable queue. Result/audit/job completion now share one transaction, with optional telemetry recorded afterward. Full background processing remains pending.
 
 Add durable queued attempts, deduplication, cancellation semantics, bounded retry policy and reconciliation for uncertain provider results. Establish separate staging and verify deployment/migration/restore procedures. Extend access tests before customer team support.
 

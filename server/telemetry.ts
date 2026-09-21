@@ -1,7 +1,7 @@
 import type { ModelUsage } from './model.ts';
 export type { RunTelemetry as AnalysisTelemetry } from '../lib/product.ts';
 import type { RunTelemetry as AnalysisTelemetry } from '../lib/product.ts';
-// Measures admitted work only. Trace delivery and final job persistence are excluded.
+// Measures admitted work only. Trace delivery and the optional telemetry update are excluded.
 export class RunTelemetry {
   private readonly started = performance.now();
   private stopped: number | null = null;

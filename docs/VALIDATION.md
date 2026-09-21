@@ -35,3 +35,9 @@ No schema migration was required. No live service request, hosted deployment or 
 ## Interrupted attempt protection
 
 On September 21, 2026, the full check passed with 48 tests, TypeScript, lint and production build. Regressions cover both late scoring and coaching completion after interruption/replacement, immutable terminal job records, missing/mismatched jobs and continued human review. Independent read-only review found no blocking issues. No schema change, live provider call, hosted deployment or browser verification was performed. Durable queue processing remains unimplemented; the detailed limits and owner deliverables are in [Project handoff](PROJECT_HANDOFF.md).
+
+## Atomic analysis completion
+
+The next recovery increment commits each AI result, successful-save audit and completed job status in one database batch transaction. Six failure-injection tests cover audit, completion and telemetry failures for both assessment and coaching. Audit/completion failure leaves no result or success audit; optional telemetry failure preserves a successful response and completed job. Telemetry checks also cover workspace isolation and fill-once behavior.
+
+All 54 tests, TypeScript, lint and production build passed. Independent review found no blocking issue in the transaction design. No schema migration or hosted deployment was performed. This closes the result/job completion gap, but does not provide durable provider execution, automatic retries or recovery of a lost HTTP response.

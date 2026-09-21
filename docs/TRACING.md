@@ -10,7 +10,7 @@ assess_consultation or grounded_coaching
   validation_save (only if model processing succeeds)
 ```
 
-The model span includes provider response reading and parsing. The validation/save span includes evidence or citation checks and persistence. Initial consultation/rubric loading, coaching retrieval, final job-state updates and trace delivery are outside these stage spans. A rejected provider answer can produce a failed model span; a rejected citation can produce a successful model span followed by a failed validation span. A failure does not imply that the provider did no billable work.
+The model span includes provider response reading and parsing. The validation/save span includes evidence or citation checks and persistence. Initial consultation/rubric loading, coaching retrieval, optional telemetry updates and trace delivery are outside these stage spans. A rejected provider answer can produce a failed model span; a rejected citation can produce a successful model span followed by a failed validation span. A failure does not imply that the provider did no billable work.
 
 Match the parent `job_id` to **Workspace settings → Recent analysis runs**. The configured model is metadata, not proof of the provider's resolved model version. Token counts remain in the application's persisted measurements; these traces do not provide billing totals.
 
@@ -38,3 +38,5 @@ For live verification, configure the server settings described in [Operations](O
 4. Temporarily use an invalid tracing key in staging. Confirm that analysis still saves once and that tracing failure is reported without raw error details. Restore the correct key afterward.
 
 Live verification, a representative latency distribution, trace retention settings and operational alerts remain pending. No new owner data or credentials are needed for the implemented engineering tests. Durable analysis processing is the next infrastructure increment; it needs explicit attempt and retry semantics before deployment.
+
+Successful AI persistence now commits the result, audit event and completed job status in one transaction. The validation/save timing includes this transaction. Optional telemetry is saved afterward; storage failure can leave measurements unavailable without failing the saved result.

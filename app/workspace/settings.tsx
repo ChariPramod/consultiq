@@ -665,8 +665,9 @@ export function WorkspaceSettings({
         {data.jobs.length > 0 && (
           <p className="run-measurement-note">
             Analysis time excludes initial loading, source retrieval, trace
-            delivery and final job recording. Tokens are provider-reported
-            counts, not a bill. Unknown usage is never counted as zero.
+            delivery and optional measurement recording. Tokens are
+            provider-reported counts, not a bill. Unknown usage is never counted
+            as zero.
           </p>
         )}
       </section>

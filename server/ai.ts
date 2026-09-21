@@ -79,7 +79,7 @@ export async function runScoring(
         );
       }),
     );
-    await repo.finishJob(jobId, undefined, telemetry.snapshot());
+    await repo.recordCompletedTelemetry(jobId, telemetry.snapshot());
     return saved;
   } catch (e) {
     await repo.finishJob(
@@ -193,7 +193,7 @@ export async function runCoaching(
         );
       }),
     );
-    await repo.finishJob(jobId, undefined, telemetry.snapshot());
+    await repo.recordCompletedTelemetry(jobId, telemetry.snapshot());
     return saved;
   } catch (e) {
     await repo.finishJob(
