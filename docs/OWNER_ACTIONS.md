@@ -2,6 +2,8 @@
 
 Engineering setup should not become homework for you. The remaining owner work is domain judgment, access to your accounts, approved source material, and commercial decisions. The application already supports importing material and recording reviews.
 
+See [the detailed project handoff](PROJECT_HANDOFF.md) for the full completed-work inventory, concrete owner deliverables and remaining engineering.
+
 ## Required for a useful first review
 
 - [ ] Choose the first buyer and workflow. Proposed starting point: a dental training lead reviewing coordinator role-plays. Confirm who reviews, who receives coaching, and what a successful session changes.
@@ -26,6 +28,6 @@ Engineering setup should not become homework for you. The remaining owner work i
 
 ## Engineering work we can continue without delegating it to you
 
-Implement evaluation tooling once labeled examples and criteria exist; add team membership and authorization once the customer access model is agreed; build retryable background processing; add monitoring, backups and restore verification; improve retrieval against measured failures; implement billing after the commercial model is decided. These are tracked in [the product plan](PRODUCT_PLAN.md).
+Run the implemented evaluation tooling once independent labels and criteria exist; add team membership and authorization once the customer access model is agreed; build retryable background processing; add monitoring, backups and restore verification; improve retrieval against measured failures; implement billing after the commercial model is decided. These are tracked in [the product plan](PRODUCT_PLAN.md).
 
 You do not need to write the backend, wire the RAG pipeline, build the landing page, install LangSmith in the codebase, or create the source repository. Those are engineering deliverables in this change.

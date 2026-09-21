@@ -92,3 +92,7 @@ The provider adapter reads response chunks under a byte limit instead of bufferi
 ## Persisted analysis measurements
 
 Analysis jobs now have nullable, versioned measurement data: total analysis duration, model-adapter duration, validation/save duration and provider-reported uncached input/output token counts. The workspace settings display these values for recent runs. Missing values remain null, including old jobs and failures before usage is reported. Timings exclude preflight/source retrieval, trace flushing and the final job update. These are not full-request latency or a billing ledger. See [Run measurements](RUN_MEASUREMENTS.md) for boundaries and migration requirements.
+
+## Interrupted attempt protection
+
+AI result insertion checks the matching job ID, workspace, consultation, operation and running status atomically with the insert. Human reviews require no job. Final job updates only affect running rows, so a late completion cannot overwrite interrupted state. Stale recovery still happens during new admission, not on a scheduler. Result persistence and job finalization remain separate; this is not durable background processing or exactly-once completion. See [the handoff](PROJECT_HANDOFF.md).

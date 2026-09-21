@@ -1,6 +1,6 @@
 # Iterative execution plan
 
-Updated: September 20, 2026. This plan continues the implemented text-review product and the [research roadmap](DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md). It records planned work separately from completed work. It does not authorize fabricated rubric anchors, customer data or performance claims.
+Updated: September 21, 2026. This plan continues the implemented text-review product and the [research roadmap](DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md). It records planned work separately from completed work. It does not authorize fabricated rubric anchors, customer data or performance claims.
 
 ## Iteration A: measurable quality and safe failure
 
@@ -33,6 +33,8 @@ Exit criteria: a measured run explains cost, latency, failures and evidence reje
 The tracing increment adds separate model and validation/save spans, empty content payloads, fixed failure codes, and delivery failure isolation. No schema change is needed. Live delivery and quality evaluation remain pending; see [Tracing](TRACING.md).
 
 ## Iteration C: recoverable processing
+
+First prerequisite implemented: reject late AI results after job interruption and preserve terminal job state. This is an active-job persistence guard, not a durable queue. Full background processing remains pending.
 
 Add durable queued attempts, deduplication, cancellation semantics, bounded retry policy and reconciliation for uncertain provider results. Establish separate staging and verify deployment/migration/restore procedures. Extend access tests before customer team support.
 

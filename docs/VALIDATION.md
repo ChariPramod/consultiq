@@ -31,3 +31,7 @@ Local verification on 2026-09-20: all 38 tests, TypeScript, lint and production 
 Local verification on 2026-09-20: all 45 tests, TypeScript, lint and production build passed through `npm run check`. Seven tracing regressions cover hierarchy, empty content payloads, fixed failure codes, model-success/validation-failure attribution, disabled and invalid configuration, delivery/finalization failure isolation, and a hung delivery deadline. The HTTP adapter is tested with controlled responses and makes no automatic retry. Independent review found no blocking issues.
 
 No schema migration was required. No live service request, hosted deployment or browser verification was performed for this backend increment. The credential-dependent checks and remaining operational limits are documented in [Tracing](TRACING.md).
+
+## Interrupted attempt protection
+
+On September 21, 2026, the full check passed with 48 tests, TypeScript, lint and production build. Regressions cover both late scoring and coaching completion after interruption/replacement, immutable terminal job records, missing/mismatched jobs and continued human review. Independent read-only review found no blocking issues. No schema change, live provider call, hosted deployment or browser verification was performed. Durable queue processing remains unimplemented; the detailed limits and owner deliverables are in [Project handoff](PROJECT_HANDOFF.md).

@@ -314,6 +314,7 @@ export class Repository {
     kind: 'human' | 'ai' = 'human',
     model = 'human-reviewer',
     promptVersion = 'manual-review/v1',
+    jobId?: string,
   ) {
     const call = await this.getCall(callId);
     const data = object(input);
@@ -340,7 +341,7 @@ export class Repository {
     }
     const assessmentId = id();
     const result = await this.statement(
-      `INSERT INTO assessments (id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND COALESCE((SELECT id FROM assessments WHERE call_id=? AND workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1),'')=?`,
+      `INSERT INTO assessments (id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND COALESCE((SELECT id FROM assessments WHERE call_id=? AND workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1),'')=? AND (?='human' OR EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='scoring' AND status='running'))`,
       assessmentId,
       this.workspaceId,
       callId,
@@ -355,6 +356,10 @@ export class Repository {
       callId,
       this.workspaceId,
       base,
+      kind,
+      jobId ?? '',
+      this.workspaceId,
+      callId,
     ).run();
     if (!result.meta.changes)
       throw new AppError(
@@ -529,7 +534,7 @@ export class Repository {
     telemetry?: AnalysisTelemetry,
   ) {
     await this.statement(
-      'UPDATE analysis_jobs SET status=?,error_code=?,finished_at=?,telemetry_json=? WHERE id=? AND workspace_id=?',
+      "UPDATE analysis_jobs SET status=?,error_code=?,finished_at=?,telemetry_json=? WHERE id=? AND workspace_id=? AND status='running'",
       error ? 'failed' : 'completed',
       error ?? null,
       now(),
@@ -545,6 +550,7 @@ export class Repository {
     citations: Citation[],
     model: string,
     sources: Pick<Citation, 'chunk_id' | 'document_id'>[] = citations,
+    jobId?: string,
   ) {
     if (!citations.length || !sources.length)
       throw new AppError(
@@ -561,7 +567,7 @@ export class Repository {
     const runId = id();
     const [saved] = await this.db.batch([
       this.statement(
-        `INSERT INTO coaching_runs (id,workspace_id,call_id,question,answer,citations,model,prompt_version,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND ${sourceChecks.join(' AND ')}`,
+        `INSERT INTO coaching_runs (id,workspace_id,call_id,question,answer,citations,model,prompt_version,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND ${sourceChecks.join(' AND ')} AND EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='coaching' AND status='running')`,
         runId,
         this.workspaceId,
         callId,
@@ -578,6 +584,9 @@ export class Repository {
           source.document_id,
           this.workspaceId,
         ]),
+        jobId ?? '',
+        this.workspaceId,
+        callId,
       ),
       this.statement(
         "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) SELECT ?,?,'coaching_saved',?,? WHERE EXISTS (SELECT 1 FROM coaching_runs WHERE id=? AND workspace_id=?)",

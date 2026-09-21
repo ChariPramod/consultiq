@@ -48,6 +48,8 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 
 ## Project documentation
 
+- [Detailed completed-work and owner handoff](docs/PROJECT_HANDOFF.md)
+
 - [Current iteration plan](docs/ITERATION_PLAN.md)
 - [Offline evaluation](docs/EVALUATION.md)
 - [Analysis run measurements](docs/RUN_MEASUREMENTS.md)

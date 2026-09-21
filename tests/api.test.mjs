@@ -598,6 +598,7 @@ test('coaching persistence rejects another workspace’s consultation and source
     }
     const [ownSource] = await owner.retrieve('follow-up');
     const [otherSource] = await other.retrieve('follow-up');
+    const activeJob = await owner.beginJob(ownCall.id, 'coaching', 30);
     for (const [callId, source] of [
       [otherCall.id, ownSource],
       [ownCall.id, otherSource],
@@ -609,6 +610,8 @@ test('coaching persistence rejects another workspace’s consultation and source
           'Confirm the date.',
           [{ ...source, span: 'Confirm the follow-up date.' }],
           'test-model',
+          [source],
+          activeJob,
         ),
         { status: 409, code: 'coaching_context_changed' },
       );
@@ -723,6 +726,161 @@ test('legacy job telemetry remains null and another workspace cannot update job 
     job = (await call(db, 'workspace')).data.jobs[0];
     assert.equal(job.status, 'completed');
     assert.equal(job.telemetry, null);
+  } finally {
+    close();
+  }
+});
+
+for (const kind of ['scoring', 'coaching']) {
+  test(`late ${kind} result cannot survive interruption or overwrite replacement job`, async () => {
+    const { db, close } = setup();
+    try {
+      const repo = await Repository.forUser(db, 'owner-a');
+      const c = await repo.createCall(input);
+      await repo.publishRubric({
+        title: 'Test rubric',
+        definitions,
+        approved: true,
+      });
+      await repo.addDocument({
+        title: 'Guide',
+        body: 'Confirm the follow-up date.',
+        approved: true,
+      });
+      let oldId;
+      let replacementId;
+      const invoke = async (_system, payload) => {
+        oldId = (
+          await db
+            .prepare("SELECT id FROM analysis_jobs WHERE status='running'")
+            .first()
+        ).id;
+        await db
+          .prepare('UPDATE analysis_jobs SET created_at=? WHERE id=?')
+          .bind('2000-01-01T00:00:00.000Z', oldId)
+          .run();
+        replacementId = await repo.beginJob(c.id, kind, 30);
+        return kind === 'scoring'
+          ? { dimensions }
+          : {
+              answer: 'Confirm the date.',
+              citations: [
+                {
+                  chunk_id: payload.sources[0].chunk_id,
+                  span: 'Confirm the follow-up date.',
+                },
+              ],
+            };
+      };
+      const response = await call(
+        db,
+        `consultations/${c.id}/${kind === 'scoring' ? 'score' : 'coaching'}`,
+        'POST',
+        { question: 'follow-up' },
+        'owner-a',
+        invoke,
+        { ANTHROPIC_API_KEY: 'test-only', AI_MODEL: 'test-model' },
+      );
+      assert.equal(response.status, 409);
+      const old = await db
+        .prepare('SELECT * FROM analysis_jobs WHERE id=?')
+        .bind(oldId)
+        .first();
+      assert.equal(old.status, 'failed');
+      assert.equal(old.error_code, 'interrupted');
+      await repo.finishJob(oldId);
+      assert.deepEqual(
+        await db
+          .prepare('SELECT * FROM analysis_jobs WHERE id=?')
+          .bind(oldId)
+          .first(),
+        old,
+      );
+      assert.equal(
+        (
+          await db
+            .prepare('SELECT status FROM analysis_jobs WHERE id=?')
+            .bind(replacementId)
+            .first()
+        ).status,
+        'running',
+      );
+      for (const table of ['assessments', 'coaching_runs'])
+        assert.equal(
+          (await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n,
+          0,
+        );
+      assert.equal(
+        (
+          await db
+            .prepare(
+              "SELECT COUNT(*) AS n FROM audit_events WHERE action IN ('assessment_saved','coaching_saved')",
+            )
+            .first()
+        ).n,
+        0,
+      );
+    } finally {
+      close();
+    }
+  });
+}
+
+test('AI persistence requires a running job for the same workspace, consultation and operation', async () => {
+  const { db, close } = setup();
+  try {
+    const owner = await Repository.forUser(db, 'owner-a');
+    const other = await Repository.forUser(db, 'owner-b');
+    const c = await owner.createCall(input);
+    const another = await owner.createCall(input);
+    const foreign = await other.createCall(input);
+    const rubric = await owner.publishRubric({
+      title: 'Test',
+      definitions,
+      approved: true,
+    });
+    await owner.addDocument({
+      title: 'Guide',
+      body: 'Confirm the follow-up date.',
+      approved: true,
+    });
+    const [source] = await owner.retrieve('follow-up');
+    const scoring = await owner.beginJob(c.id, 'scoring', 30);
+    const wrongCall = await owner.beginJob(another.id, 'scoring', 30);
+    const wrongWorkspace = await other.beginJob(foreign.id, 'scoring', 30);
+    const review = { rubric_id: rubric.id, dimensions };
+    for (const job of [undefined, 'missing', wrongCall, wrongWorkspace]) {
+      await assert.rejects(
+        owner.saveAssessment(c.id, review, 'ai', 'test', 'test', job),
+        { status: 409 },
+      );
+    }
+    for (const job of [undefined, scoring, wrongCall, wrongWorkspace]) {
+      await assert.rejects(
+        owner.saveCoaching(
+          c.id,
+          'follow-up',
+          'Confirm the date.',
+          [{ ...source, span: 'Confirm the follow-up date.' }],
+          'test',
+          [source],
+          job,
+        ),
+        { status: 409 },
+      );
+    }
+    await owner.finishJob(scoring);
+    await assert.rejects(
+      owner.saveAssessment(c.id, review, 'ai', 'test', 'test', scoring),
+      { status: 409 },
+    );
+    const coaching = await owner.beginJob(c.id, 'coaching', 30);
+    await assert.rejects(
+      owner.saveAssessment(c.id, review, 'ai', 'test', 'test', coaching),
+      { status: 409 },
+    );
+    await owner.saveAssessment(c.id, review);
+    assert.equal((await owner.getCall(c.id)).latest.kind, 'human');
   } finally {
     close();
   }

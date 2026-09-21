@@ -72,6 +72,7 @@ export async function runScoring(
               'ai',
               env.AI_MODEL!,
               'assess-transcript/v1',
+              jobId,
             );
             return saved;
           }),
@@ -185,6 +186,7 @@ export async function runCoaching(
                 chunk_id,
                 document_id,
               })),
+              jobId,
             );
             return saved;
           }),
