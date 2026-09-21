@@ -59,3 +59,7 @@ Finish and verify each increment before broadening it. Preserve existing interfa
 ## Latest verification
 
 Nested tracing: all 45 tests and the complete `npm run check` gate passed locally. Independent review found no blocking issues. No new schema migration or hosted deployment was performed. The next independent engineering priority is durable attempt processing; first specify admission, cancellation, uncertain provider completion and retry rules, then implement and exercise interruption recovery before deployment.
+
+## Interface and recovery increment
+
+Implemented Analysis activity with status/search filters, available timing/token measurements, explicit latest-20 scope, refresh and manual recovery links. Added Motion with reduced-motion support and one attributed Magic UI accent alongside existing Tailwind v4, shadcn and Lucide. Owner explicitly chose to retain Sites/Vinext for this iteration. Client writes are not retried automatically after ambiguous responses. Browser/accessibility regression checks, broader session-expiry handling and durable jobs remain future work.

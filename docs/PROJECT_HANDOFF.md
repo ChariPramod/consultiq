@@ -127,3 +127,7 @@ For detailed data sourcing, provider options and market research, see [Data, clo
 - [Operations](OPERATIONS.md): server settings and deployment boundaries.
 
 Keep this handoff updated as work ships. Completed source, successful automated checks, live verification and commercial readiness are distinct milestones.
+
+## Latest interface increment
+
+Analysis activity now provides run search, status filters, measurements, manual refresh and recovery links using existing private workspace data. Motion and one attributed Magic UI accent extend the Tailwind v4/shadcn/Lucide interface. The owner chose to preserve Sites/Vinext this iteration. Client requests reject unreadable responses and explain ambiguous writes without automatic retries. See [UI components and recovery](UI_COMPONENTS.md) for behavior and validation limits. No new owner account is required for these features.

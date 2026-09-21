@@ -50,7 +50,9 @@ import { CallTable, Empty, SearchField, TranscriptDialog } from './components';
 import Review from './review';
 import { Knowledge, RubricEditor, WorkspaceSettings } from './settings';
 import './product.css';
+import { AnalysisActivity } from './activity';
 type View =
+  | 'activity'
   | 'overview'
   | 'consultations'
   | 'coordinators'
@@ -59,6 +61,7 @@ type View =
   | 'rubric'
   | 'settings';
 const navigation = [
+  { id: 'activity', label: 'Analysis activity', icon: ClipboardCheck },
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'consultations', label: 'Consultations', icon: AudioLines },
   { id: 'coordinators', label: 'Coordinators', icon: Users },
@@ -97,10 +100,10 @@ function Navigation({
       <SidebarContent>
         <div className="product-nav-label">WORKSPACE</div>
         <SidebarMenu className="product-navigation">
-          {navigation.map(({ id, label, icon: Icon }, i) => (
+          {navigation.map(({ id, label, icon: Icon }) => (
             <SidebarMenuItem
               key={id}
-              className={i === 4 ? 'nav-section-break' : ''}
+              className={id === 'knowledge' ? 'nav-section-break' : ''}
             >
               <SidebarMenuButton
                 isActive={view === id}
@@ -158,8 +161,10 @@ export default function Workspace() {
     try {
       const result = await api<WorkspaceData>('workspace');
       setData(result);
+      setSignedOut(false);
       setError('');
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) setData(null);
       setSignedOut(e instanceof ApiError && e.status === 401);
       setError(
         e instanceof Error ? e.message : 'Unable to open the workspace.',
@@ -267,19 +272,21 @@ export default function Workspace() {
                   <p>
                     {selected
                       ? 'A complete record of the conversation and its review.'
-                      : view === 'overview'
-                        ? 'Review conversations, track assessments, and identify the next coaching action.'
-                        : view === 'consultations'
-                          ? 'Your consultation records and their assessment history.'
-                          : view === 'coordinators'
-                            ? 'Compare supported assessments across your saved consultations.'
-                            : view === 'patterns'
-                              ? 'Explore the behaviors recorded in your reviewed conversations.'
-                              : view === 'knowledge'
-                                ? 'Approved guidance for grounded consultation coaching.'
-                                : view === 'rubric'
-                                  ? 'Define the standard used to assess each conversation.'
-                                  : 'Manage your workspace and review integration readiness.'}
+                      : view === 'activity'
+                        ? 'Inspect recent runs and recover with a clear record of what happened.'
+                        : view === 'overview'
+                          ? 'Review conversations, track assessments, and identify the next coaching action.'
+                          : view === 'consultations'
+                            ? 'Your consultation records and their assessment history.'
+                            : view === 'coordinators'
+                              ? 'Compare supported assessments across your saved consultations.'
+                              : view === 'patterns'
+                                ? 'Explore the behaviors recorded in your reviewed conversations.'
+                                : view === 'knowledge'
+                                  ? 'Approved guidance for grounded consultation coaching.'
+                                  : view === 'rubric'
+                                    ? 'Define the standard used to assess each conversation.'
+                                    : 'Manage your workspace and review integration readiness.'}
                   </p>
                 </div>
                 {!selected &&
@@ -312,6 +319,14 @@ export default function Workspace() {
                 />
               ) : (
                 <>
+                  {view === 'activity' && (
+                    <AnalysisActivity
+                      data={data}
+                      reload={reload}
+                      openCall={(id) => navigate('consultations', id)}
+                      openLibrary={() => navigate('knowledge')}
+                    />
+                  )}
                   {view === 'overview' && (
                     <Overview
                       data={data}

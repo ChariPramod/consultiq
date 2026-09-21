@@ -48,6 +48,7 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 
 ## Project documentation
 
+- [Workspace activity, UI components and recovery](docs/UI_COMPONENTS.md)
 - [Detailed completed-work and owner handoff](docs/PROJECT_HANDOFF.md)
 
 - [Current iteration plan](docs/ITERATION_PLAN.md)

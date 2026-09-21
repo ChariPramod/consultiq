@@ -11,18 +11,25 @@ export async function api<T>(
   path: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
   body?: unknown,
+  send: typeof fetch = fetch,
 ): Promise<T> {
   let response: Response;
   try {
-    const options: RequestInit = { method, credentials: 'same-origin' };
+    const options: RequestInit = {
+      method,
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(70000),
+    };
     if (method !== 'GET' && body !== undefined) {
       options.headers = { 'Content-Type': 'application/json' };
       options.body = JSON.stringify(body);
     }
-    response = await fetch(`/api/${path}`, options);
+    response = await send(`/api/${path}`, options);
   } catch {
     throw new ApiError(
-      'Could not reach your workspace. Check your connection and retry.',
+      method === 'GET'
+        ? 'Could not reach your workspace. Check your connection and refresh.'
+        : 'The response was lost or timed out. The change may have been saved. Refresh and check before submitting again.',
       0,
       'network',
     );
@@ -39,5 +46,13 @@ export async function api<T>(
       typeof error.error === 'string' ? error.error : 'request_failed',
     );
   }
+  if (data === null)
+    throw new ApiError(
+      method === 'GET'
+        ? 'The workspace returned an unreadable response. Refresh to try again.'
+        : 'The response could not be read. Check saved results before submitting again.',
+      response.status,
+      'invalid_response',
+    );
   return data as T;
 }

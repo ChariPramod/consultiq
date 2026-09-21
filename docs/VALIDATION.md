@@ -41,3 +41,7 @@ On September 21, 2026, the full check passed with 48 tests, TypeScript, lint and
 The next recovery increment commits each AI result, successful-save audit and completed job status in one database batch transaction. Six failure-injection tests cover audit, completion and telemetry failures for both assessment and coaching. Audit/completion failure leaves no result or success audit; optional telemetry failure preserves a successful response and completed job. Telemetry checks also cover workspace isolation and fill-once behavior.
 
 All 54 tests, TypeScript, lint and production build passed. Independent review found no blocking issue in the transaction design. No schema migration or hosted deployment was performed. This closes the result/job completion gap, but does not provide durable provider execution, automatic retries or recovery of a lost HTTP response.
+
+## Analysis activity and client recovery
+
+The activity increment adds four focused tests for run filtering and client fallbacks, bringing the suite to 58 tests. All 58 tests, TypeScript, lint and the production build passed locally. Read-only review identified and resolved filter-control semantics and privacy wording. The local `/workspace` route returned HTTP 200; no browser interaction, visual regression, screen-reader or hosted verification was performed. See [UI components](UI_COMPONENTS.md) for the stack decision, attribution and remaining limits.
