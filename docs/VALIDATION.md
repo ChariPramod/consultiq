@@ -45,3 +45,9 @@ All 54 tests, TypeScript, lint and production build passed. Independent review f
 ## Analysis activity and client recovery
 
 The activity increment adds four focused tests for run filtering and client fallbacks, bringing the suite to 58 tests. All 58 tests, TypeScript, lint and the production build passed locally. Read-only review identified and resolved filter-control semantics and privacy wording. The local `/workspace` route returned HTTP 200; no browser interaction, visual regression, screen-reader or hosted verification was performed. See [UI components](UI_COMPONENTS.md) for the stack decision, attribution and remaining limits.
+
+## Reviewed coaching and practice
+
+The learning workflow passes 67 tests plus TypeScript, lint and production build. New coverage includes manual assignments without model configuration, idempotent and concurrent requests, conflicting/stale decisions, approval revocation, workspace isolation, human-only baselines/follow-ups, rubric/coordinator/date eligibility, pinned comparisons, historical-rubric access and follow-up review, deletion cascades and audit rollback. The local migration runner applied the generated migration and subsequently reported no outstanding migrations. The local workspace route returned HTTP 200.
+
+Independent review identified and corrected duplicate-request races, per-assignment database queries and draft loss during refresh. Browser interaction, assistive technology, hosted migration/deployment and domain-quality validation remain pending. See [Learning workflow](LEARNING_WORKFLOW.md) for the exact recovery guarantees and remaining infrastructure scope.

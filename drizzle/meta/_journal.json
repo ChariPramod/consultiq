@@ -15,6 +15,13 @@
       "when": 1789973202141,
       "tag": "0001_tense_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790043981580,
+      "tag": "0002_oval_corsair",
+      "breakpoints": true
     }
   ]
 }

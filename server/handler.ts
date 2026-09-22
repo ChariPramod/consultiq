@@ -1,3 +1,4 @@
+import { Learning } from './learning.ts';
 import {
   AppError,
   Repository,
@@ -95,6 +96,24 @@ export async function handleApi(
     }
     if (path === '/api/consultations' && method === 'POST')
       return json(await repo.createCall(await body(request)), 201);
+    if (path === '/api/rubrics' && method === 'GET')
+      return json({
+        rubrics: (
+          await repo
+            .statement(
+              'SELECT id,title,created_at FROM rubrics WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 100',
+              repo.workspaceId,
+            )
+            .all()
+        ).results,
+      });
+    const rubricVersion = path.match(/^\/api\/rubrics\/([^/]+)$/);
+    if (rubricVersion && method === 'GET') {
+      const rubric = await repo.rubric(rubricVersion[1]);
+      if (!rubric)
+        throw new AppError(404, 'not_found', 'Published rubric not found.');
+      return json(rubric);
+    }
     if (path === '/api/rubrics' && method === 'POST')
       return json(await repo.publishRubric(await body(request)), 201);
     if (path === '/api/library' && method === 'POST')
@@ -105,6 +124,26 @@ export async function handleApi(
           requiredText(url.searchParams.get('q'), 'search query', 500),
         ),
       });
+    const learning = new Learning(repo);
+    const learn = path.match(
+      /^\/api\/consultations\/([^/]+)\/(learning|practice)$/,
+    );
+    if (learn && learn[2] === 'learning' && method === 'GET')
+      return json(await learning.read(learn[1]));
+    if (learn && learn[2] === 'practice' && method === 'POST')
+      return json(await learning.assign(learn[1], await body(request)), 201);
+    const coachingReview = path.match(/^\/api\/coaching\/([^/]+)\/reviews$/);
+    if (coachingReview && method === 'POST')
+      return json(
+        await learning.review(coachingReview[1], await body(request)),
+        201,
+      );
+    const completion = path.match(/^\/api\/practice\/([^/]+)\/complete$/);
+    if (completion && method === 'POST')
+      return json(
+        await learning.complete(completion[1], await body(request)),
+        201,
+      );
     const doc = path.match(/^\/api\/library\/([^/]+)$/);
     if (doc && method === 'DELETE')
       return json(await repo.deleteDocument(doc[1]));

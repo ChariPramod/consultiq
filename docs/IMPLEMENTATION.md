@@ -98,3 +98,7 @@ Analysis jobs now have nullable, versioned measurement data: total analysis dura
 AI result insertion checks the matching job ID, workspace, consultation, operation and running status atomically with the insert. Human reviews require no job. Final job updates only affect running rows, so a late completion cannot overwrite interrupted state. Stale recovery still happens during new admission, not on a scheduler. Result persistence, successful-save audit and job completion now share a transaction; this is not durable background processing or exactly-once provider execution. See [the handoff](PROJECT_HANDOFF.md).
 
 Successful AI persistence now commits the result, audit event and completed job status in one transaction. The validation/save timing includes this transaction. Optional telemetry is saved afterward; storage failure can leave measurements unavailable without failing the saved result.
+
+## Reviewed coaching and practice
+
+`server/learning.ts` implements workspace-scoped append-only coaching decisions, practice assignments and immutable follow-up completions. Mutations deduplicate request IDs, reject stale inputs atomically and commit success audits in the same transaction. Joined reads return pinned baseline/follow-up assessments. See [Learning workflow](LEARNING_WORKFLOW.md) for schema, API, deletion rules and limits.

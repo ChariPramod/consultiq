@@ -131,3 +131,7 @@ Keep this handoff updated as work ships. Completed source, successful automated 
 ## Latest interface increment
 
 Analysis activity now provides run search, status filters, measurements, manual refresh and recovery links using existing private workspace data. Motion and one attributed Magic UI accent extend the Tailwind v4/shadcn/Lucide interface. The owner chose to preserve Sites/Vinext this iteration. Client requests reject unreadable responses and explain ambiguous writes without automatic retries. See [UI components and recovery](UI_COMPONENTS.md) for behavior and validation limits. No new owner account is required for these features.
+
+## Latest learning workflow increment
+
+The Practice tab now supports reviewer approval/correction/rejection of coaching, human-assessment-based practice assignments, and same-rubric human-reviewed before/after comparisons. Manual assignments and approved-source search remain available without generation. This uses the existing single-user workspace; it does not invite coordinators or send assignments externally. [Learning workflow](LEARNING_WORKFLOW.md) documents the new migration, request deduplication, conflict recovery and deletion behavior. Your next contribution is still approved standards, permitted examples and independent domain review—not backend coding. Durable workers, team roles, audio and staging remain pending.

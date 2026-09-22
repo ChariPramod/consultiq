@@ -63,3 +63,7 @@ Nested tracing: all 45 tests and the complete `npm run check` gate passed locall
 ## Interface and recovery increment
 
 Implemented Analysis activity with status/search filters, available timing/token measurements, explicit latest-20 scope, refresh and manual recovery links. Added Motion with reduced-motion support and one attributed Magic UI accent alongside existing Tailwind v4, shadcn and Lucide. Owner explicitly chose to retain Sites/Vinext for this iteration. Client writes are not retried automatically after ambiguous responses. Browser/accessibility regression checks, broader session-expiry handling and durable jobs remain future work.
+
+## Text learning loop
+
+Implemented the reviewer-to-practice-to-reassessment workflow described in [Learning workflow](LEARNING_WORKFLOW.md), with a generated migration, manual fallbacks and failure/concurrency tests. This advances the coaching portion of Iteration E without claiming that the queue, teams or voice layers exist. Next infrastructure work remains durable attempts and staging; next product work includes practice archive/correction flows and broader loaded-record navigation.

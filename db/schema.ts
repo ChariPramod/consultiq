@@ -146,3 +146,64 @@ export const events = sqliteTable(
   },
   (t) => [index('audit_workspace_created').on(t.workspaceId, t.createdAt)],
 );
+export const coachingReviews = sqliteTable(
+  'coaching_reviews',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    coachingId: text('coaching_id')
+      .notNull()
+      .references(() => coaching.id, { onDelete: 'cascade' }),
+    decision: text('decision').notNull(),
+    guidance: text('guidance').notNull(),
+    notes: text('notes').notNull(),
+    baseId: text('base_id').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    index('coaching_reviews_parent').on(
+      t.workspaceId,
+      t.coachingId,
+      t.createdAt,
+    ),
+  ],
+);
+export const practiceAssignments = sqliteTable(
+  'practice_assignments',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    callId: text('call_id')
+      .notNull()
+      .references(() => calls.id, { onDelete: 'cascade' }),
+    baselineId: text('baseline_id')
+      .notNull()
+      .references(() => assessments.id, { onDelete: 'cascade' }),
+    reviewId: text('review_id').references(() => coachingReviews.id, {
+      onDelete: 'cascade',
+    }),
+    dimension: integer('dimension').notNull(),
+    instruction: text('instruction').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('practice_workspace_call').on(t.workspaceId, t.callId)],
+);
+export const practiceCompletions = sqliteTable('practice_completions', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  assignmentId: text('assignment_id')
+    .notNull()
+    .unique()
+    .references(() => practiceAssignments.id, { onDelete: 'cascade' }),
+  assessmentId: text('assessment_id')
+    .notNull()
+    .references(() => assessments.id, { onDelete: 'cascade' }),
+  reflection: text('reflection').notNull(),
+  createdAt: text('created_at').notNull(),
+});

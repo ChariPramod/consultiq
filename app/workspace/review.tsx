@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { api } from '@/lib/api';
+import { LearningWorkspace } from './learning';
 import {
   DIMENSIONS,
   OUTCOME_LABELS,
@@ -78,6 +79,7 @@ export default function Review({
       setError(
         e instanceof Error ? e.message : 'Could not open the consultation.',
       );
+      throw e;
     }
   }, [callId]);
   useEffect(() => {
@@ -117,7 +119,10 @@ export default function Review({
         {error ? (
           <div className="product-empty">
             <p role="alert">{error}</p>
-            <button className="primary-button" onClick={() => void reload()}>
+            <button
+              className="primary-button"
+              onClick={() => void reload().catch(() => {})}
+            >
               Retry
             </button>
             <button className="text-button" onClick={onBack}>
@@ -273,6 +278,7 @@ export default function Review({
           <TabsTrigger value="coaching">
             <BookOpen size={15} /> Coaching
           </TabsTrigger>
+          <TabsTrigger value="practice">Practice</TabsTrigger>
           <TabsTrigger value="history">
             <History size={15} /> History{' '}
             <span className="count-badge">{detail.assessments.length}</span>
@@ -434,6 +440,20 @@ export default function Review({
             </section>
           )}
         </TabsContent>
+        <TabsContent value="practice">
+          <LearningWorkspace
+            call={call}
+            coaching={detail.coaching}
+            calls={data.calls}
+            onRefresh={async () => {
+              await reload();
+              await onChanged();
+            }}
+            onHumanReview={() =>
+              data.rubric ? setEditOpen(true) : onConfigure()
+            }
+          />
+        </TabsContent>
         <TabsContent value="coaching">
           <CoachingPanel
             callId={callId}
@@ -529,7 +549,7 @@ function AssessmentDialog({
   open,
   onOpenChange,
   call,
-  rubric,
+  rubric: initialRubric,
   onSaved,
 }: {
   open: boolean;
@@ -538,10 +558,40 @@ function AssessmentDialog({
   rubric: NonNullable<WorkspaceData['rubric']>;
   onSaved: () => Promise<void>;
 }) {
+  const [rubric, setRubric] = useState(initialRubric);
+  const [rubricId, setRubricId] = useState(initialRubric.id);
+  const [versions, setVersions] = useState<
+    { id: string; title: string; created_at: string }[]
+  >([]);
+  const [versionError, setVersionError] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void api<{ rubrics: typeof versions }>('rubrics').then(
+      (result) => {
+        if (active) {
+          setVersions(result.rubrics);
+          setVersionError('');
+        }
+      },
+      () => {
+        if (active)
+          setVersionError(
+            'Could not load the version list. The current rubric remains available; you can enter a known rubric ID.',
+          );
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [open]);
   const [active, setActive] = useState(0);
   const [entries, setEntries] = useState(
     DIMENSIONS.map((_, dimension) => {
-      const existing = call.latest?.content.dimensions[dimension];
+      const existing =
+        call.latest?.rubric_id === rubric.id
+          ? call.latest.content.dimensions[dimension]
+          : undefined;
       return {
         dimension,
         score: existing?.score ?? null,
@@ -579,6 +629,84 @@ function AssessmentDialog({
             {rubric.title} · {complete} of 8 dimensions ready to save
           </DialogDescription>
         </DialogHeader>
+        <div className="rounded-lg border p-3 space-y-2">
+          <label className="text-sm">
+            Published rubric version
+            <NativeSelect
+              disabled={busy}
+              value={rubricId}
+              onChange={(e) => setRubricId(e.target.value)}
+            >
+              <NativeSelectOption value={rubric.id}>
+                {rubric.title} · current draft
+              </NativeSelectOption>
+              {versions
+                .filter((v) => v.id !== rubric.id)
+                .map((v) => (
+                  <NativeSelectOption key={v.id} value={v.id}>
+                    {v.title} · {new Date(v.created_at).toLocaleString()} ·{' '}
+                    {v.id.slice(0, 8)}
+                  </NativeSelectOption>
+                ))}
+            </NativeSelect>
+          </label>
+          <label className="block text-sm">
+            Or enter a published rubric ID
+            <input
+              className="mt-1 block w-full rounded border p-2"
+              value={rubricId}
+              disabled={busy}
+              onChange={(e) => setRubricId(e.target.value)}
+              maxLength={100}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy || rubricId === rubric.id || !rubricId.trim()}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const chosen = await api<NonNullable<WorkspaceData['rubric']>>(
+                  `rubrics/${encodeURIComponent(rubricId)}`,
+                );
+                setRubric(chosen);
+                setActive(0);
+                setEntries(
+                  DIMENSIONS.map((_, dimension) => ({
+                    dimension,
+                    score: null,
+                    rationale: '',
+                    coaching_note: '',
+                    turn_index: 0,
+                    span: '',
+                  })),
+                );
+              } catch (e) {
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : 'Could not load rubric. Your draft is unchanged.',
+                );
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Start empty draft with selected rubric
+          </button>
+          <p className="text-sm text-slate-500">
+            Loading a different version clears this assessment draft. Use the
+            assignment’s baseline rubric for a comparable follow-up. Version
+            list shows the latest 100 published rubrics.
+          </p>
+          {versionError && (
+            <p role="alert" className="text-sm text-amber-800">
+              {versionError}
+            </p>
+          )}
+        </div>
         <div className="assessment-editor-layout">
           <nav aria-label="Rubric dimensions">
             {DIMENSIONS.map((d, i) => (
@@ -842,6 +970,33 @@ function CoachingPanel({
               </>
             )}
           </button>
+          {enabled && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy || !question.trim()}
+              onClick={async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  const result = await api<{
+                    sources: NonNullable<typeof sources>;
+                  }>(`library/search?q=${encodeURIComponent(question)}`);
+                  setSources(result.sources);
+                } catch (e) {
+                  setError(
+                    e instanceof Error
+                      ? e.message
+                      : 'Could not search approved guidance.',
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Search approved sources only
+            </button>
+          )}
         </form>
         {error && (
           <p className="form-error" role="alert">

@@ -33,6 +33,7 @@ This runs automated tests, TypeScript, lint, and the production build. Generate 
 - Optional server-side Claude analysis, tracked analysis jobs, and daily request limits.
 - Saved analysis timings and reported input/output tokens, including available usage on failures.
 - Approved document ingestion, keyword retrieval, and citation-validated RAG coaching.
+- Append-only coaching decisions, manual practice assignments and pinned human-reviewed follow-up comparisons.
 - Optional LangSmith tracing with separate model and validation/save stages; content and raw errors excluded.
 - Offline assessment evaluation against independently supplied references, with coverage and abstention reporting.
 
@@ -48,6 +49,7 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 
 ## Project documentation
 
+- [Reviewed coaching and practice workflow](docs/LEARNING_WORKFLOW.md)
 - [Workspace activity, UI components and recovery](docs/UI_COMPONENTS.md)
 - [Detailed completed-work and owner handoff](docs/PROJECT_HANDOFF.md)
 

@@ -6,6 +6,7 @@ import { handleApi } from '../server/handler.ts';
 import { Repository } from '../server/repository.ts';
 function setup() {
   let failPattern;
+  let batchTail = Promise.resolve();
   const sql = new DatabaseSync(':memory:');
   sql.exec('PRAGMA foreign_keys=ON');
   for (const file of readdirSync('drizzle')
@@ -38,16 +39,21 @@ function setup() {
       };
     },
     async batch(statements) {
-      sql.exec('BEGIN');
-      try {
-        const results = [];
-        for (const statement of statements) results.push(await statement.run());
-        sql.exec('COMMIT');
-        return results;
-      } catch (e) {
-        sql.exec('ROLLBACK');
-        throw e;
-      }
+      const result = batchTail.then(async () => {
+        sql.exec('BEGIN');
+        try {
+          const results = [];
+          for (const statement of statements)
+            results.push(await statement.run());
+          sql.exec('COMMIT');
+          return results;
+        } catch (error) {
+          sql.exec('ROLLBACK');
+          throw error;
+        }
+      });
+      batchTail = result.catch(() => {});
+      return result;
     },
   };
   return {
@@ -1014,3 +1020,564 @@ for (const kind of ['scoring', 'coaching']) {
     });
   }
 }
+
+async function learningFixture(db) {
+  const repo = await Repository.forUser(db, 'owner-a');
+  const c = await repo.createCall(input);
+  const rubric = await repo.publishRubric({
+    title: 'Reviewed test standard',
+    definitions,
+    approved: true,
+  });
+  const baseline = await repo.saveAssessment(c.id, {
+    rubric_id: rubric.id,
+    dimensions,
+  });
+  const document = await repo.addDocument({
+    title: 'Approved training guidance',
+    body: 'Confirm the follow-up date.',
+    approved: true,
+  });
+  const [source] = await repo.retrieve('follow-up');
+  const job = await repo.beginJob(c.id, 'coaching', 30);
+  const coaching = await repo.saveCoaching(
+    c.id,
+    'How to confirm follow-up?',
+    'Confirm the date.',
+    [{ ...source, span: 'Confirm the follow-up date.' }],
+    'test-model',
+    [source],
+    job,
+  );
+  return { repo, c, rubric, baseline, document, coaching };
+}
+function assignmentInput(baseline, review = null) {
+  return {
+    request_id: crypto.randomUUID(),
+    baseline_id: baseline.id,
+    review_id: review,
+    dimension: 0,
+    instruction:
+      'Practice confirming the next step and ask the patient to restate the date.',
+  };
+}
+
+test('manual practice works without provider configuration, replays safely and compares pinned human reviews', async () => {
+  const { db, close } = setup();
+  try {
+    const { repo, c, rubric, baseline } = await learningFixture(db);
+    const body = assignmentInput(baseline);
+    const path = `consultations/${c.id}/practice`;
+    const created = await call(db, path, 'POST', body);
+    assert.equal(created.status, 201);
+    assert.equal((await call(db, path, 'POST', body)).data.id, created.data.id);
+    assert.equal(
+      (
+        await call(db, path, 'POST', {
+          ...body,
+          instruction: 'Changed instructions',
+        })
+      ).status,
+      409,
+    );
+    const followup = await repo.createCall({
+      ...input,
+      title: 'Follow-up practice',
+      recorded_at: '2026-09-10',
+    });
+    const reviewed = await repo.saveAssessment(followup.id, {
+      rubric_id: rubric.id,
+      dimensions: dimensions.map((d) => ({ ...d, score: 5 })),
+    });
+    const complete = {
+      request_id: crypto.randomUUID(),
+      assessment_id: reviewed.id,
+      reflection:
+        'The coordinator confirmed the date clearly in this role-play.',
+    };
+    const end = `practice/${created.data.id}/complete`;
+    assert.equal((await call(db, end, 'POST', complete)).status, 201);
+    assert.equal((await call(db, end, 'POST', complete)).status, 201);
+    assert.equal(
+      (
+        await call(db, end, 'POST', {
+          ...complete,
+          request_id: crypto.randomUUID(),
+        })
+      ).status,
+      409,
+    );
+    const data = (await call(db, `consultations/${c.id}/learning`)).data;
+    assert.equal(data.assignments[0].baseline.id, baseline.id);
+    assert.equal(data.assignments[0].followup.id, reviewed.id);
+    assert.equal(
+      (
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM audit_events WHERE action='practice_assigned'",
+          )
+          .first()
+      ).n,
+      1,
+    );
+    assert.equal(
+      (
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM audit_events WHERE action='practice_completed'",
+          )
+          .first()
+      ).n,
+      1,
+    );
+    await repo.deleteCall(followup.id);
+    assert.equal(
+      (await call(db, `consultations/${c.id}/learning`)).data.assignments[0]
+        .completion,
+      null,
+    );
+  } finally {
+    close();
+  }
+});
+
+test('coaching decisions append, stale saves conflict and revoked approvals block practice completion', async () => {
+  const { db, close } = setup();
+  try {
+    const { repo, c, rubric, baseline, coaching } = await learningFixture(db);
+    const path = `coaching/${coaching.id}/reviews`;
+    const approval = {
+      request_id: crypto.randomUUID(),
+      base_id: '',
+      decision: 'approved',
+      guidance: 'Confirm the agreed date and invite the patient to repeat it.',
+      notes: 'Checked the quoted guidance and its relevance.',
+    };
+    assert.equal((await call(db, path, 'POST', approval)).status, 201);
+    assert.equal((await call(db, path, 'POST', approval)).status, 201);
+    assert.equal(
+      (
+        await call(db, path, 'POST', {
+          ...approval,
+          request_id: crypto.randomUUID(),
+        })
+      ).status,
+      409,
+    );
+    const task = await call(
+      db,
+      `consultations/${c.id}/practice`,
+      'POST',
+      assignmentInput(baseline, approval.request_id),
+    );
+    assert.equal(task.status, 201);
+    const rejected = {
+      request_id: crypto.randomUUID(),
+      base_id: approval.request_id,
+      decision: 'rejected',
+      notes: 'This advice needs a domain review before use.',
+    };
+    assert.equal((await call(db, path, 'POST', rejected)).status, 201);
+    assert.equal(
+      (
+        await call(
+          db,
+          `consultations/${c.id}/practice`,
+          'POST',
+          assignmentInput(baseline, approval.request_id),
+        )
+      ).status,
+      409,
+    );
+    const f = await repo.createCall({ ...input, recorded_at: '2026-09-10' });
+    const assessment = await repo.saveAssessment(f.id, {
+      rubric_id: rubric.id,
+      dimensions,
+    });
+    assert.equal(
+      (
+        await call(db, `practice/${task.data.id}/complete`, 'POST', {
+          request_id: crypto.randomUUID(),
+          assessment_id: assessment.id,
+          reflection: 'Checked the role-play.',
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (await call(db, `consultations/${c.id}/learning`)).data.reviews.length,
+      2,
+    );
+  } finally {
+    close();
+  }
+});
+
+test('learning operations reject foreign identities, mismatched rubrics, earlier and same consultations', async () => {
+  const { db, close } = setup();
+  try {
+    const { repo, c, rubric, baseline, coaching } = await learningFixture(db);
+    assert.equal(
+      (
+        await call(
+          db,
+          `consultations/${c.id}/learning`,
+          'GET',
+          undefined,
+          'owner-b',
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await call(
+          db,
+          `consultations/${c.id}/practice`,
+          'POST',
+          assignmentInput(baseline),
+          'owner-b',
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await call(
+          db,
+          `coaching/${coaching.id}/reviews`,
+          'POST',
+          {
+            request_id: crypto.randomUUID(),
+            decision: 'approved',
+            guidance: 'Valid guidance text.',
+            notes: 'Checked the source.',
+          },
+          'owner-b',
+        )
+      ).status,
+      409,
+    );
+    const task = (
+      await call(
+        db,
+        `consultations/${c.id}/practice`,
+        'POST',
+        assignmentInput(baseline),
+      )
+    ).data;
+    const wrongRubric = await repo.publishRubric({
+      title: 'Other test rubric',
+      definitions,
+      approved: true,
+    });
+    for (const [coordinator, date, rubricId] of [
+      ['Different person', '2026-09-10', rubric.id],
+      [input.coordinator, '2020-01-01', rubric.id],
+      [input.coordinator, '2026-09-10', wrongRubric.id],
+    ]) {
+      const f = await repo.createCall({
+        ...input,
+        coordinator,
+        recorded_at: date,
+      });
+      const a = await repo.saveAssessment(f.id, {
+        rubric_id: rubricId,
+        dimensions,
+      });
+      assert.equal(
+        (
+          await call(db, `practice/${task.id}/complete`, 'POST', {
+            request_id: crypto.randomUUID(),
+            assessment_id: a.id,
+            reflection: 'Human reflection.',
+          })
+        ).status,
+        409,
+      );
+    }
+    assert.equal(
+      (
+        await call(db, `practice/${task.id}/complete`, 'POST', {
+          request_id: crypto.randomUUID(),
+          assessment_id: baseline.id,
+          reflection: 'Human reflection.',
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await call(
+          db,
+          `practice/${task.id}/complete`,
+          'POST',
+          {
+            request_id: crypto.randomUUID(),
+            assessment_id: baseline.id,
+            reflection: 'Human reflection.',
+          },
+          'owner-b',
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await call(db, `consultations/${c.id}/practice`, 'POST', {
+          ...assignmentInput(baseline),
+          dimension: 9,
+        })
+      ).status,
+      422,
+    );
+  } finally {
+    close();
+  }
+});
+
+test('deleting approved sources removes linked learning content but preserves independent manual practice', async () => {
+  const { db, close } = setup();
+  try {
+    const { repo, c, baseline, coaching } = await learningFixture(db);
+    const review = {
+      request_id: crypto.randomUUID(),
+      decision: 'approved',
+      guidance: 'Confirm the date.',
+      notes: 'Source checked.',
+    };
+    await call(db, `coaching/${coaching.id}/reviews`, 'POST', review);
+    await call(
+      db,
+      `consultations/${c.id}/practice`,
+      'POST',
+      assignmentInput(baseline, review.request_id),
+    );
+    const manual = await call(
+      db,
+      `consultations/${c.id}/practice`,
+      'POST',
+      assignmentInput(baseline),
+    );
+    const doc = await db.prepare('SELECT id FROM knowledge_documents').first();
+    await repo.deleteDocument(doc.id);
+    const data = (await call(db, `consultations/${c.id}/learning`)).data;
+    assert.equal(data.reviews.length, 0);
+    assert.deepEqual(
+      data.assignments.map((a) => a.id),
+      [manual.data.id],
+    );
+    await repo.deleteCall(c.id);
+    assert.equal(
+      (
+        await db
+          .prepare('SELECT COUNT(*) AS n FROM practice_assignments')
+          .first()
+      ).n,
+      0,
+    );
+  } finally {
+    close();
+  }
+});
+
+test('learning audit failure rolls back assignment and allows an identical retry', async (t) => {
+  const { db, close, failNext } = setup();
+  t.mock.method(console, 'error', () => {});
+  try {
+    const { c, baseline } = await learningFixture(db);
+    const body = assignmentInput(baseline),
+      path = `consultations/${c.id}/practice`;
+    failNext(/INSERT INTO audit_events/);
+    assert.equal((await call(db, path, 'POST', body)).status, 500);
+    assert.equal(
+      (
+        await db
+          .prepare('SELECT COUNT(*) AS n FROM practice_assignments')
+          .first()
+      ).n,
+      0,
+    );
+    assert.equal((await call(db, path, 'POST', body)).status, 201);
+  } finally {
+    close();
+  }
+});
+
+test('concurrent replay creates one decision and one audit; competing revisions have one winner', async () => {
+  const { db, close } = setup();
+  try {
+    const { coaching } = await learningFixture(db),
+      path = `coaching/${coaching.id}/reviews`;
+    const input = {
+      request_id: crypto.randomUUID(),
+      base_id: '',
+      decision: 'approved',
+      guidance: 'Confirm the date with the patient.',
+      notes: 'Checked against the source.',
+    };
+    const replay = await Promise.all([
+      call(db, path, 'POST', input),
+      call(db, path, 'POST', input),
+    ]);
+    assert.deepEqual(
+      replay.map((r) => r.status),
+      [201, 201],
+    );
+    assert.equal(
+      (
+        await db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM audit_events WHERE action='coaching_reviewed'",
+          )
+          .first()
+      ).n,
+      1,
+    );
+    const competing = await Promise.all([
+      call(db, path, 'POST', {
+        ...input,
+        request_id: crypto.randomUUID(),
+        base_id: input.request_id,
+      }),
+      call(db, path, 'POST', {
+        ...input,
+        request_id: crypto.randomUUID(),
+        base_id: input.request_id,
+        decision: 'rejected',
+      }),
+    ]);
+    assert.deepEqual(
+      competing.map((r) => r.status).sort((a, b) => a - b),
+      [201, 409],
+    );
+    assert.equal(
+      (await db.prepare('SELECT COUNT(*) AS n FROM coaching_reviews').first())
+        .n,
+      2,
+    );
+  } finally {
+    close();
+  }
+});
+
+test('practice rejects AI baselines and AI follow-ups and keeps original baseline after a later revision', async () => {
+  const { db, close } = setup();
+  try {
+    const { repo, c, rubric, baseline } = await learningFixture(db);
+    const task = (
+      await call(
+        db,
+        `consultations/${c.id}/practice`,
+        'POST',
+        assignmentInput(baseline),
+      )
+    ).data;
+    const job = await repo.beginJob(c.id, 'scoring', 30);
+    const ai = await repo.saveAssessment(
+      c.id,
+      { rubric_id: rubric.id, base_assessment_id: baseline.id, dimensions },
+      'ai',
+      'test',
+      'test',
+      job,
+    );
+    assert.equal(
+      (
+        await call(
+          db,
+          `consultations/${c.id}/practice`,
+          'POST',
+          assignmentInput(ai),
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await call(
+          db,
+          `consultations/${c.id}/practice`,
+          'POST',
+          assignmentInput(baseline),
+        )
+      ).status,
+      409,
+    );
+    const f = await repo.createCall({ ...input, recorded_at: '2026-09-10' }),
+      j = await repo.beginJob(f.id, 'scoring', 30);
+    const a = await repo.saveAssessment(
+      f.id,
+      { rubric_id: rubric.id, dimensions },
+      'ai',
+      'test',
+      'test',
+      j,
+    );
+    assert.equal(
+      (
+        await call(db, `practice/${task.id}/complete`, 'POST', {
+          request_id: crypto.randomUUID(),
+          assessment_id: a.id,
+          reflection: 'Review needed.',
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (await call(db, `consultations/${c.id}/learning`)).data.assignments[0]
+        .baseline.id,
+      baseline.id,
+    );
+  } finally {
+    close();
+  }
+});
+
+test('historical rubric versions remain available only in their workspace for follow-up review', async () => {
+  const { db, close } = setup();
+  try {
+    const { repo, c, rubric, baseline } = await learningFixture(db);
+    const task = (
+      await call(
+        db,
+        `consultations/${c.id}/practice`,
+        'POST',
+        assignmentInput(baseline),
+      )
+    ).data;
+    await repo.publishRubric({
+      title: 'New standard',
+      definitions,
+      approved: true,
+    });
+    assert.equal((await call(db, `rubrics/${rubric.id}`)).data.id, rubric.id);
+    assert.equal(
+      (await call(db, `rubrics/${rubric.id}`, 'GET', undefined, 'owner-b'))
+        .status,
+      404,
+    );
+    assert.deepEqual(
+      (await call(db, 'rubrics', 'GET', undefined, 'owner-b')).data.rubrics,
+      [],
+    );
+    assert.equal((await call(db, 'rubrics')).data.rubrics.length, 2);
+    const next = await repo.createCall({ ...input, recorded_at: '2026-09-10' });
+    const oldVersionReview = await repo.saveAssessment(next.id, {
+      rubric_id: rubric.id,
+      dimensions,
+    });
+    assert.equal(
+      (
+        await call(db, `practice/${task.id}/complete`, 'POST', {
+          request_id: crypto.randomUUID(),
+          assessment_id: oldVersionReview.id,
+          reflection: 'Reassessed using the pinned rubric.',
+        })
+      ).status,
+      201,
+    );
+  } finally {
+    close();
+  }
+});
