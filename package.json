@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/migrate-local.mjs",
     "check": "npm test && npm run typecheck && npm run lint && npm run build",
-    "evaluate": "node --experimental-strip-types scripts/evaluate.mjs"
+    "evaluate": "node --experimental-strip-types scripts/evaluate.mjs",
+    "doctor": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/doctor.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

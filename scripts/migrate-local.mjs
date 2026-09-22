@@ -5,8 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { createClient } from '@libsql/client';
 import { databaseConfig } from '../server/database.ts';
 
-/** A write transaction serializes concurrent deploys and commits schema + ledger together. */
-export async function migrate(client, directory = resolve('drizzle')) {
+/** Read and validate the ordered migration files without opening storage. */
+export async function readMigrations(directory = resolve('drizzle')) {
   const journal = JSON.parse(
     await readFile(resolve(directory, 'meta/_journal.json'), 'utf8'),
   );
@@ -45,6 +45,12 @@ export async function migrate(client, directory = resolve('drizzle')) {
       };
     }),
   );
+  return migrations;
+}
+
+/** A write transaction serializes concurrent deploys and commits schema + ledger together. */
+export async function migrate(client, directory = resolve('drizzle')) {
+  const migrations = await readMigrations(directory);
   const tx = await client.transaction('write');
   try {
     const foreignKeys = await tx.execute('PRAGMA foreign_keys');

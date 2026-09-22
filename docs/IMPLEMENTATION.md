@@ -102,3 +102,7 @@ Successful AI persistence now commits the result, audit event and completed job 
 ## Reviewed coaching and practice
 
 `server/learning.ts` implements workspace-scoped append-only coaching decisions, practice assignments and immutable follow-up completions. Mutations deduplicate request IDs, reject stale inputs atomically and commit success audits in the same transaction. Joined reads return pinned baseline/follow-up assessments. See [Learning workflow](LEARNING_WORKFLOW.md) for schema, API, deletion rules and limits.
+
+## Runtime recovery and setup checks
+
+`server/runtime.ts` owns verified session admission, connection lifecycle and sanitized infrastructure failures. The runtime opens storage only after authorization, and a close failure cannot mask a committed response. `app/workspace/error.tsx` provides retry navigation for rendering failures without exposing raw errors. `npm run doctor` checks required setup and migration checksums without querying workspace records; it is an operator tool, not an HTTP endpoint. See [Deployment reliability](DEPLOYMENT_RELIABILITY.md) for boundaries and unfinished work.

@@ -27,9 +27,10 @@ For AI configuration, copy `.env.example` to `.env.local`, fill in server-side c
 
 ```sh
 npm run check
+npm run doctor
 ```
 
-This runs automated tests, TypeScript, lint, and the production build. Generate new database migrations with `npm run db:generate`, then apply them locally with `npm run db:migrate`.
+`npm run check` runs automated tests, TypeScript, lint, and the production build. `npm run doctor` checks local environment configuration and database migration history without reading consultation records; it does not verify live Clerk sessions. Generate new database migrations with `npm run db:generate`, then apply them locally with `npm run db:migrate`.
 
 ## What is included
 
@@ -59,6 +60,8 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 The runtime now targets official Next.js on Vercel, with Clerk authentication and a libSQL/Turso database. The previous Sites configuration is archived in `docs/legacy/sites-hosting.json`. Existing Sites data has **not** been transferred. See [Vercel migration and owner setup](docs/VERCEL_MIGRATION.md) for credentials, deployment, data transfer and verification steps.
 
 ## Project documentation
+
+- [Deployment reliability and prioritized unfinished work](docs/DEPLOYMENT_RELIABILITY.md)
 
 - [Reviewed coaching and practice workflow](docs/LEARNING_WORKFLOW.md)
 - [Workspace activity, UI components and recovery](docs/UI_COMPONENTS.md)
