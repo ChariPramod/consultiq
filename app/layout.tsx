@@ -1,3 +1,5 @@
+import { ClerkProvider } from '@clerk/nextjs';
+import { authConfigured } from '@/server/access';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
@@ -14,7 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sans.variable} ${mono.variable} antialiased`}>
-        {children}
+        {authConfigured(process.env) ? (
+          <ClerkProvider>{children}</ClerkProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

@@ -1,4 +1,4 @@
-/* oxlint-disable next/no-html-link-for-pages -- Sites sign-in is dispatcher-owned and must use a top-level anchor without prefetch. */
+import Link from 'next/link';
 export function SignInLink({
   children,
   className,
@@ -7,12 +7,8 @@ export function SignInLink({
   className?: string;
 }) {
   return (
-    <a
-      className={className}
-      href="/signin-with-chatgpt?return_to=%2Fworkspace"
-      target="_top"
-    >
+    <Link className={className} href="/sign-in">
       {children}
-    </a>
+    </Link>
   );
 }

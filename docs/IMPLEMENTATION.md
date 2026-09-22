@@ -2,12 +2,12 @@
 
 ## Request and data flow
 
-The React application calls same-origin API routes. The server receives the authenticated Sites identity, resolves its private workspace, and scopes repository operations to that workspace. D1 stores records; data does not depend on browser local storage.
+The React application calls same-origin API routes. The Next.js Node runtime verifies a Clerk session and checks an explicit user-ID allowlist, resolves its private workspace, and scopes repository operations to that workspace. Hosted libSQL stores records; data does not depend on browser local storage.
 
 ```mermaid
 flowchart LR
   UI[Review workspace] --> API[Authenticated API]
-  API --> DB[(D1 records)]
+  API --> DB[(libSQL records)]
   API --> R[Approved rubric]
   R --> M[Configured model]
   M --> V[Quote validation]
@@ -67,9 +67,9 @@ All application endpoints require authenticated identity. Mutation requests reje
 
 ## Identity and operation limits
 
-The trusted identity header is supplied by the Sites dispatcher. Do not expose this Worker directly behind an arbitrary host that accepts caller-supplied identity headers. A deployment outside Sites needs an equivalent verified authentication boundary before serving the API.
+`server/session.ts` verifies the Clerk session; `server/access.ts` applies CONSULTIQ_ALLOWED_USER_IDS. Missing configuration denies access. The API passes the verified ID directly to the handler; caller-supplied Sites identity headers are ignored. `server/database.ts` provides atomic libSQL batches and checks foreign keys. Vercel refuses local file storage. Migrations run explicitly, never on a request or build.
 
-Workspaces are private to individual platform users. This is not organization membership or a team permission system. The host's owner-only site policy adds another access boundary for the current private publication.
+Workspaces are private to individual platform users. This is not organization membership or a team permission system. Vercel preview Deployment Protection supplies an additional host boundary; production domain privacy must be verified separately before promotion.
 
 Analysis runs during the HTTP request. A job record captures running, completed, failed and interrupted state; daily limits and duplicate-running checks constrain provider use. There is no durable queue, retry scheduler or token-cost ledger. Library and loaded-consultation limits are intentional pilot constraints, not a scaling claim.
 

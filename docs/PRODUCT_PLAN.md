@@ -9,7 +9,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | Capability | Current state |
 | --- | --- |
 | Product landing page | Implemented, with clearly labeled illustrative content and working workspace links |
-| Private workspace and persistence | Implemented with Sites identity and D1 |
+| Private workspace and persistence | Implemented with Clerk identity, explicit access allowlist and libSQL; cloud credentials pending |
 | Transcript import and human review | Implemented for role-play and synthetic transcripts |
 | Rubric governance | Owner-authored anchors, explicit approval, immutable published versions |
 | Automated assessment | Implemented; provider credentials and approved rubric required |
@@ -26,7 +26,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 
 The interface has become the front end of a persistent application. Shared UI components provide consistent dialogs, tables, tabs, forms, and navigation. Domain validation and storage sit behind the API, so changing the UI cannot bypass evidence or workspace checks.
 
-The original plan proposed a separate Python service and Postgres. The current Sites deployment uses a TypeScript Worker and D1 so the application can run with durable storage on its existing host. This is a deliberate implementation change, not a claim that the proposed Python pipeline exists. A separate analysis service remains possible behind the model-call boundary when evaluation, audio processing, or training workloads justify it.
+The original plan proposed a separate Python service and Postgres. The application originally used a TypeScript Worker and D1 on Sites. The current migration targets official Next.js on Vercel with Clerk and hosted libSQL. This is a deliberate implementation change, not a claim that the proposed Python pipeline exists. A separate analysis service remains possible behind the model-call boundary when evaluation, audio processing, or training workloads justify it.
 
 ## Next release: a dependable pilot
 
@@ -39,7 +39,7 @@ The original plan proposed a separate Python service and Postgres. The current S
 
 ## Commercial release
 
-Add checkout, subscriptions, usage accounting, support and customer onboarding after pricing and entitlements are agreed. Configure a public marketing domain separately from authenticated customer access. Review the hosting/runtime choice for the expected support commitments; the current framework is a beta release.
+Add checkout, subscriptions, usage accounting, support and customer onboarding after pricing and entitlements are agreed. Configure a public marketing domain separately from authenticated customer access. Review the hosting/runtime choice for the expected support commitments; live authentication, storage, backup and operational checks remain required.
 
 Real consultation recordings require a separate ingestion design covering permission, transcription quality, speaker attribution, access, retention, and provider processing. A source label alone cannot detect sensitive content. Do not describe this release as ready for real patient data.
 

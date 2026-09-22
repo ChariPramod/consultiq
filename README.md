@@ -1,5 +1,9 @@
 # ConsultIQ
 
+[Live application](https://consultiq-ecru.vercel.app) · [Source repository](https://github.com/ChariPramod/consultiq)
+
+The landing page is deployed on Vercel. Workspace authentication and persistent cloud storage still require the Clerk/Turso owner setup in [the migration guide](docs/VERCEL_MIGRATION.md).
+
 ConsultIQ is a consultation review and coaching workspace for dental training teams. Reviewers can import a role-play transcript, assess it against an approved rubric, inspect supporting quotes, and record a revised human assessment. Coaching can retrieve approved training material and generate an answer with source citations.
 
 The repository contains a premium product landing page and a persistent application. The original static interface has been replaced with database-backed workflows. This release is a private pilot foundation, with commercial release work explicitly tracked in [the product plan](docs/PRODUCT_PLAN.md).
@@ -10,13 +14,16 @@ Use Node matching `.nvmrc` and npm.
 
 ```sh
 npm ci
+cp .env.example .env.local
+# Configure Clerk keys, allowed user IDs and DATABASE_URL in .env.local.
+mkdir -p .local-data
 npm run db:migrate
 npm run dev
 ```
 
-Open the local URL printed by the server. The landing page is at `/`; the application is at `/workspace`. Use the local Sites sign-in flow to enter a private workspace. Model credentials are optional for manual review and library search.
+Open the local URL printed by the server. The landing page is at `/`; the application is at `/workspace`. Use Clerk sign-in with an account listed in CONSULTIQ_ALLOWED_USER_IDS to enter a private workspace. Model credentials are optional for manual review and library search.
 
-For AI configuration, copy `.dev.vars.example` to `.dev.vars`, fill in server-side credentials, and restart the server. Never commit that file. See [operations](docs/OPERATIONS.md) before enabling external services.
+For AI configuration, copy `.env.example` to `.env.local`, fill in server-side credentials, and restart the server. Never commit that file. See [operations](docs/OPERATIONS.md) before enabling external services.
 
 ```sh
 npm run check
@@ -46,6 +53,10 @@ npm run evaluate -- /absolute/path/to/dataset.json /absolute/path/to/new-report.
 ```
 
 See [the evaluation contract](docs/EVALUATION.md) for the input format, reference requirements and interpretation. The command computes an offline report; it does not generate predictions or certify model quality.
+
+## Hosting migration
+
+The runtime now targets official Next.js on Vercel, with Clerk authentication and a libSQL/Turso database. The previous Sites configuration is archived in `docs/legacy/sites-hosting.json`. Existing Sites data has **not** been transferred. See [Vercel migration and owner setup](docs/VERCEL_MIGRATION.md) for credentials, deployment, data transfer and verification steps.
 
 ## Project documentation
 

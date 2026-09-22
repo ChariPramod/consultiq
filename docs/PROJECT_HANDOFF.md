@@ -1,3 +1,5 @@
+> Hosting update: the Vercel migration supersedes Sites/D1 and `.dev.vars` instructions below. Follow [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) and `.env.example` for current setup. Earlier completion evidence remains historical.
+
 # ConsultIQ: completed work and owner handoff
 
 Updated September 21, 2026. This document describes the implemented source, its limits, and the remaining work. It is not a claim of commercial readiness. Recent increments are in the private GitHub repository; they have not been deployed to the existing hosted workspace.

@@ -53,10 +53,11 @@ export async function handleApi(
   request: Request,
   env: Runtime,
   invoke?: ModelCall,
+  verifiedUserId?: string | null,
 ) {
   const requestId = crypto.randomUUID();
   try {
-    const user = request.headers.get('oai-authenticated-user-id');
+    const user = verifiedUserId;
     if (!user)
       throw new AppError(
         401,

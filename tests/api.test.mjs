@@ -115,6 +115,7 @@ async function call(
     request(path, method, data, user),
     { DB: db, ...config },
     invoke,
+    user,
   );
   return { status: response.status, data: await response.json() };
 }
@@ -136,6 +137,8 @@ test('authentication and cross-origin writes are rejected', async () => {
             'https://untrusted.example',
           ),
           { DB: db },
+          undefined,
+          'owner-a',
         )
       ).status,
       403,

@@ -43,3 +43,10 @@ next-env.d.ts
 # Worker runtime secrets
 .dev.vars*
 !.dev.vars.example
+
+# Local libSQL storage and example configuration
+.local-data/
+*.db
+*.db-shm
+*.db-wal
+!.env.example

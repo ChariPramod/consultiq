@@ -35,6 +35,13 @@ export default function Landing() {
           <a href="#workflow">How it works</a>
           <a href="#product">Product</a>
           <a href="#principles">Our approach</a>
+          <a
+            href="https://github.com/ChariPramod/consultiq"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub <ArrowUp />
+          </a>
         </nav>
         <Link href="/workspace" className="marketing-login">
           Open workspace <ArrowUp />
@@ -388,6 +395,13 @@ export default function Landing() {
         <span>Consultation intelligence, with evidence.</span>
         <div>
           <a href="#principles">Our approach</a>
+          <a
+            href="https://github.com/ChariPramod/consultiq"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub <ArrowUp />
+          </a>
           <Link href="/workspace">
             Workspace <ArrowUp />
           </Link>

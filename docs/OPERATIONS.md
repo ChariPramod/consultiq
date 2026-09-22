@@ -1,3 +1,5 @@
+> Hosting update: the Vercel migration supersedes Sites/D1 and `.dev.vars` instructions below. Follow [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) and `.env.example` for current setup. Earlier completion evidence remains historical.
+
 # Operations
 
 ## Local setup

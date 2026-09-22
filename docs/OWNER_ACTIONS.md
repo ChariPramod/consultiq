@@ -1,3 +1,5 @@
+> Hosting update: the Vercel migration supersedes Sites/D1 and `.dev.vars` instructions below. Follow [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) and `.env.example` for current setup. Earlier completion evidence remains historical.
+
 # Owner actions
 
 Engineering setup should not become homework for you. The remaining owner work is domain judgment, access to your accounts, approved source material, and commercial decisions. The application already supports importing material and recording reviews.
