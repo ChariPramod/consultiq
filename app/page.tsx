@@ -32,7 +32,7 @@ export default function Landing() {
           </span>
         </Link>
         <nav aria-label="Main navigation">
-          <a href="#workflow">How it works</a>
+          <Link href="/tour">Product tour</Link>
           <a href="#product">Product</a>
           <a href="#principles">Our approach</a>
           <a
@@ -68,9 +68,9 @@ export default function Landing() {
               <Link href="/workspace" className="marketing-primary">
                 Enter your workspace <ArrowRight size={17} />
               </Link>
-              <a href="#workflow" className="marketing-secondary">
-                Explore the workflow <ArrowDown size={15} />
-              </a>
+              <Link href="/tour" className="marketing-secondary">
+                Take the product tour <ArrowDown size={15} />
+              </Link>
             </div>
             <div className="hero-footnote">
               <LockKeyhole size={14} /> Private pilot · Built for treatment

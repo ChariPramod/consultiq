@@ -22,6 +22,7 @@ export default async function WorkspacePage() {
               : 'Your account has not been granted access. Contact the workspace owner.'}
           </p>
           {access.status === 'forbidden' && <AccountSignOut />}
+          <Link href="/tour">Explore the product tour</Link>
           <Link href="/">Return to ConsultIQ</Link>
         </div>
       </main>
@@ -33,6 +34,7 @@ export default async function WorkspacePage() {
           <h1>ConsultIQ workspace</h1>
           <p>Sign in to access your private consultation records.</p>
           <SignInLink className="primary-button">Sign in</SignInLink>
+          <Link href="/tour">Explore the product tour</Link>
           <Link href="/">Return to ConsultIQ</Link>
         </div>
       </main>

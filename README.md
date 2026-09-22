@@ -1,6 +1,6 @@
 # ConsultIQ
 
-[Live application](https://consultiq-ecru.vercel.app) · [Source repository](https://github.com/ChariPramod/consultiq)
+[Live application](https://consultiq-ecru.vercel.app) · [Product tour](https://consultiq-ecru.vercel.app/tour) · [Source repository](https://github.com/ChariPramod/consultiq)
 
 The landing page is deployed on Vercel. Workspace authentication and persistent cloud storage still require the Clerk/Turso owner setup in [the migration guide](docs/VERCEL_MIGRATION.md).
 
@@ -58,6 +58,10 @@ See [the evaluation contract](docs/EVALUATION.md) for the input format, referenc
 ## Hosting migration
 
 The runtime now targets official Next.js on Vercel, with Clerk authentication and a libSQL/Turso database. The previous Sites configuration is archived in `docs/legacy/sites-hosting.json`. Existing Sites data has **not** been transferred. See [Vercel migration and owner setup](docs/VERCEL_MIGRATION.md) for credentials, deployment, data transfer and verification steps.
+
+## Presenting the project
+
+Use the public `/tour` walkthrough to explain the workflow and exercise the actual quote validator against clearly labeled synthetic content. It makes no AI calls and saves no records. See [the presentation guide](docs/PRESENTATION_GUIDE.md) for a five-minute script, technical talking points and the remaining live-workflow checks.
 
 ## Project documentation
 
