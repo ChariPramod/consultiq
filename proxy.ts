@@ -7,6 +7,9 @@ import {
 import { authConfigured } from './server/access';
 const clerk = clerkMiddleware();
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  // Dispatcher has its own exact server-secret boundary; it is not a Clerk session.
+  if (request.nextUrl.pathname === '/api/internal/worker')
+    return NextResponse.next();
   if (!authConfigured(process.env)) return NextResponse.next();
   return clerk(request, event);
 }

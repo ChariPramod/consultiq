@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, selectWorkspace, selectedWorkspace } from '@/lib/api';
 import {
   DIMENSIONS,
   OUTCOME_LABELS,
@@ -51,7 +51,9 @@ import Review from './review';
 import { Knowledge, RubricEditor, WorkspaceSettings } from './settings';
 import './product.css';
 import { AnalysisActivity } from './activity';
+import { Team } from './team';
 type View =
+  | 'team'
   | 'activity'
   | 'overview'
   | 'consultations'
@@ -68,6 +70,7 @@ const navigation = [
   { id: 'patterns', label: 'Patterns', icon: ChartNoAxesCombined },
   { id: 'knowledge', label: 'Knowledge library', icon: BookOpen },
   { id: 'rubric', label: 'Review rubric', icon: Layers3 },
+  { id: 'team', label: 'Team access', icon: Users },
   { id: 'settings', label: 'Workspace settings', icon: Settings2 },
 ] as const;
 function Navigation({
@@ -139,9 +142,14 @@ function Navigation({
   );
 }
 export default function Workspace() {
+  const [workspaces, setWorkspaces] = useState<
+    { id: string; name: string; role: string }[]
+  >([]);
+  const [pollPaused, setPollPaused] = useState(false);
   const [data, setData] = useState<WorkspaceData | null>(null);
   const [error, setError] = useState('');
   const [signedOut, setSignedOut] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const search = useSyncExternalStore(
     subscribeLocation,
     () => location.search,
@@ -162,9 +170,12 @@ export default function Workspace() {
       const result = await api<WorkspaceData>('workspace');
       setData(result);
       setSignedOut(false);
+      setAccessDenied(false);
       setError('');
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setData(null);
+      if (e instanceof ApiError && [401, 403, 404].includes(e.status))
+        setData(null);
+      setAccessDenied(e instanceof ApiError && [403, 404].includes(e.status));
       setSignedOut(e instanceof ApiError && e.status === 401);
       setError(
         e instanceof Error ? e.message : 'Unable to open the workspace.',
@@ -181,6 +192,9 @@ export default function Workspace() {
       (error: unknown) => {
         if (!active) return;
         setSignedOut(error instanceof ApiError && error.status === 401);
+        setAccessDenied(
+          error instanceof ApiError && [403, 404].includes(error.status),
+        );
         setError(
           error instanceof Error
             ? error.message
@@ -192,6 +206,47 @@ export default function Workspace() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    let active = true;
+    void api<{ workspaces: typeof workspaces }>('workspaces').then(
+      (result) => {
+        if (active) setWorkspaces(result.workspaces);
+      },
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+  const pending = !!data?.jobs.some(
+    (job) => job.status === 'queued' || job.status === 'running',
+  );
+  useEffect(() => {
+    if (!pending) return;
+    let active = true;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (!active) return;
+      if (attempts === 0) setPollPaused(false);
+      if (document.visibilityState === 'visible') {
+        attempts++;
+        try {
+          await reload();
+        } catch {
+          /* Keep loaded records and show the refresh error. */
+        }
+      }
+      if (!active) return;
+      if (attempts < 24) timer = setTimeout(poll, 5000);
+      else setPollPaused(true);
+    };
+    timer = setTimeout(poll, 5000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [pending, reload]);
   const navigate = (next: View, callId: string | null = null) => {
     setQuery('');
     setCoordinator('all');
@@ -232,14 +287,73 @@ export default function Workspace() {
             <ChevronRight size={14} />
             <strong>{title}</strong>
           </div>
-          <span className="private-indicator">
-            <LockIcon /> Private
-          </span>
+          <div className="flex items-center gap-3">
+            {!!workspaces.length && (
+              <NativeSelect
+                aria-label="Active workspace; switching clears drafts"
+                value={
+                  data?.workspace.id ?? selectedWorkspace() ?? workspaces[0].id
+                }
+                onChange={(event) => {
+                  if (
+                    window.confirm(
+                      'Switch workspace? Any unsaved drafts will be discarded.',
+                    )
+                  )
+                    try {
+                      selectWorkspace(event.target.value);
+                    } catch {
+                      setError(
+                        'Your browser blocked workspace selection. Enable session storage and try again.',
+                      );
+                    }
+                }}
+              >
+                {workspaces.map((workspace) => (
+                  <NativeSelectOption key={workspace.id} value={workspace.id}>
+                    {workspace.name} · {workspace.role}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            )}
+            <span className="private-indicator">
+              <LockIcon /> Private
+            </span>
+          </div>
         </header>
         <main id="workspace-content" className="product-content">
+          {pending && (
+            <output className="block mb-4 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+              Analysis is queued or running.{' '}
+              {pollPaused
+                ? 'Automatic refresh paused. Open Analysis activity and refresh to check results.'
+                : 'This view checks for updates while the tab is visible.'}
+            </output>
+          )}
+          {data?.access.role === 'viewer' && (
+            <p className="mb-4 rounded-lg bg-slate-100 p-3 text-sm">
+              Viewer access: you can inspect records. Editing requires a
+              reviewer or owner role.
+            </p>
+          )}
           {error && (
             <div className="product-error" role="alert">
               <p>{error}</p>
+              {accessDenied && (
+                <button
+                  onClick={() => {
+                    try {
+                      selectWorkspace('');
+                    } catch {
+                      setError(
+                        'Enable browser session storage to return to your personal workspace.',
+                      );
+                    }
+                  }}
+                >
+                  Return to personal workspace
+                </button>
+              )}
               {signedOut ? (
                 <SignInLink>Sign in again</SignInLink>
               ) : (
@@ -286,10 +400,13 @@ export default function Workspace() {
                                   ? 'Approved guidance for grounded consultation coaching.'
                                   : view === 'rubric'
                                     ? 'Define the standard used to assess each conversation.'
-                                    : 'Manage your workspace and review integration readiness.'}
+                                    : view === 'team'
+                                      ? 'Manage membership and join shared review workspaces.'
+                                      : 'Manage your workspace and review integration readiness.'}
                   </p>
                 </div>
                 {!selected &&
+                  data.access.role !== 'viewer' &&
                   [
                     'overview',
                     'consultations',
@@ -306,7 +423,7 @@ export default function Workspace() {
               </div>
               {selected ? (
                 <Review
-                  key={selected}
+                  key={`${data.workspace.id}:${selected}`}
                   callId={selected}
                   data={data}
                   onChanged={reload}
@@ -330,7 +447,9 @@ export default function Workspace() {
                   {view === 'overview' && (
                     <Overview
                       data={data}
-                      onImport={() => setImportOpen(true)}
+                      onImport={() => {
+                        if (data.access.role !== 'viewer') setImportOpen(true);
+                      }}
                       navigate={navigate}
                     />
                   )}
@@ -410,6 +529,10 @@ export default function Workspace() {
                             action={
                               <button
                                 className="primary-button"
+                                disabled={
+                                  !data.calls.length &&
+                                  data.access.role === 'viewer'
+                                }
                                 onClick={() =>
                                   data.calls.length
                                     ? (setQuery(''),
@@ -449,10 +572,17 @@ export default function Workspace() {
                   {view === 'knowledge' && (
                     <Knowledge data={data} reload={reload} />
                   )}
-                  {view === 'rubric' && (
+                  {view === 'team' && <Team data={data} />}
+                  {view === 'rubric' && data.access.role === 'owner' && (
                     <RubricEditor current={data.rubric} reload={reload} />
                   )}
-                  {view === 'settings' && (
+                  {(view === 'rubric' || view === 'settings') &&
+                    data.access.role !== 'owner' && (
+                      <p className="product-notice">
+                        Only the workspace owner can change these settings.
+                      </p>
+                    )}
+                  {view === 'settings' && data.access.role === 'owner' && (
                     <WorkspaceSettings data={data} reload={reload} />
                   )}
                 </>
@@ -571,7 +701,14 @@ function Overview({
                 action: () => navigate('knowledge'),
               },
             ].map((item) => (
-              <button key={item.label} onClick={item.action}>
+              <button
+                key={item.label}
+                disabled={
+                  data.access.role === 'viewer' &&
+                  item.label === 'Import your first transcript'
+                }
+                onClick={item.action}
+              >
                 <span className={item.done ? 'done' : ''}>
                   {item.done ? <Check size={13} /> : <ChevronRight size={13} />}
                 </span>
@@ -606,7 +743,11 @@ function Overview({
             title="Begin with a conversation"
             description="Import a synthetic or role-play transcript. It will stay in your workspace, ready for review."
             action={
-              <button className="primary-button" onClick={onImport}>
+              <button
+                className="primary-button"
+                disabled={data.access.role === 'viewer'}
+                onClick={onImport}
+              >
                 <Plus size={17} /> Import transcript
               </button>
             }

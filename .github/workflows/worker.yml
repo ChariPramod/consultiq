@@ -1,0 +1,40 @@
+name: Dispatch background analysis
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: consultiq-production-worker
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    if: github.event_name == 'workflow_dispatch' || vars.CONSULTIQ_WORKER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Dispatch one queued job
+        env:
+          WORKER_SECRET: ${{ secrets.CONSULTIQ_WORKER_SECRET }}
+        run: |
+          node --input-type=module <<'JS'
+          const secret = process.env.WORKER_SECRET;
+          if (!secret || secret.length < 32) {
+            console.error('Worker dispatch is not configured. Set CONSULTIQ_WORKER_SECRET.');
+            process.exit(1);
+          }
+          try {
+            const response = await fetch('https://consultiq-ecru.vercel.app/api/internal/worker', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${secret}` },
+              redirect: 'manual',
+              signal: AbortSignal.timeout(125000),
+            });
+            await response.body?.cancel();
+            if (response.status !== 200) throw new Error('Dispatch failed');
+            console.log('Worker dispatch completed. Check workspace Operations for job outcomes.');
+          } catch {
+            console.error('Worker dispatch failed. Check database configuration and workspace Operations. No mutation is retried in this invocation.');
+            process.exit(1);
+          }
+          JS

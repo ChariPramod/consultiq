@@ -11,6 +11,8 @@ export async function runScoring(
   callId: string,
   env: RuntimeConfig,
   invoke: ModelCall = modelClient(env),
+  admittedJobId?: string,
+  expected?: { baseId: string; rubricId: string },
 ) {
   if (!configuration(env).scoring)
     throw new AppError(
@@ -19,14 +21,25 @@ export async function runScoring(
       'Automated scoring is not enabled. You can record a human assessment.',
     );
   const call = await repo.getCall(callId);
-  const rubric = await repo.rubric();
+  const rubric = await repo.rubric(expected?.rubricId);
+  if (
+    expected &&
+    ((call.latest?.id ?? '') !== expected.baseId ||
+      rubric?.id !== expected.rubricId)
+  )
+    throw new AppError(
+      409,
+      'stale_assessment',
+      'The queued assessment inputs changed.',
+    );
   if (!rubric)
     throw new AppError(
       422,
       'rubric_required',
       'Publish an approved rubric before scoring a consultation.',
     );
-  const jobId = await repo.beginJob(callId, 'scoring', dailyLimit(env));
+  const jobId =
+    admittedJobId ?? (await repo.beginJob(callId, 'scoring', dailyLimit(env)));
   const telemetry = new RunTelemetry();
   try {
     const saved = await observed(env, 'assess_consultation', jobId, (spans) =>
@@ -66,7 +79,7 @@ export async function runScoring(
               callId,
               {
                 rubric_id: rubric.id,
-                base_assessment_id: call.latest?.id ?? '',
+                base_assessment_id: expected?.baseId ?? call.latest?.id ?? '',
                 dimensions: result.dimensions,
               },
               'ai',
@@ -96,6 +109,7 @@ export async function runCoaching(
   question: unknown,
   env: RuntimeConfig,
   invoke: ModelCall = modelClient(env),
+  admittedJobId?: string,
 ) {
   if (!configuration(env).scoring)
     throw new AppError(
@@ -112,7 +126,8 @@ export async function runCoaching(
       'insufficient_context',
       'No relevant approved material was found. Add guidance or use more specific terms.',
     );
-  const jobId = await repo.beginJob(callId, 'coaching', dailyLimit(env));
+  const jobId =
+    admittedJobId ?? (await repo.beginJob(callId, 'coaching', dailyLimit(env)));
   const telemetry = new RunTelemetry();
   try {
     const saved = await observed(env, 'grounded_coaching', jobId, (spans) =>

@@ -23,12 +23,14 @@ export function LearningWorkspace({
   calls,
   onHumanReview,
   onRefresh,
+  readOnly = false,
 }: {
   call: CallRecord;
   coaching: Coaching[];
   calls: CallRecord[];
   onHumanReview: () => void;
   onRefresh: () => Promise<void>;
+  readOnly?: boolean;
 }) {
   const [data, setData] = useState<LearningData | null>(null),
     [error, setError] = useState('');
@@ -97,6 +99,7 @@ export function LearningWorkspace({
                 <CoachingDecision
                   key={c.id}
                   coaching={c}
+                  readOnly={readOnly}
                   history={view.reviews.filter((r) => r.coaching_id === c.id)}
                   onSaved={reload}
                 />
@@ -119,14 +122,19 @@ export function LearningWorkspace({
                   Record a human assessment first. Practice uses that immutable
                   review as its baseline.
                 </p>
-                <Button onClick={onHumanReview}>Record human assessment</Button>
+                <Button disabled={readOnly} onClick={onHumanReview}>
+                  Record human assessment
+                </Button>
               </div>
             )}
-            <AssignmentForm call={call} data={view} onSaved={reload} />
+            {!readOnly && (
+              <AssignmentForm call={call} data={view} onSaved={reload} />
+            )}
             {view.assignments.map((assignment) => (
               <PracticeCard
                 key={assignment.id}
                 assignment={assignment}
+                readOnly={readOnly}
                 calls={calls}
                 call={call}
                 reviews={view.reviews}
@@ -148,10 +156,12 @@ export function LearningWorkspace({
 function CoachingDecision({
   coaching,
   history,
+  readOnly,
   onSaved,
 }: {
   coaching: Coaching;
   history: CoachingReview[];
+  readOnly: boolean;
   onSaved: () => Promise<void>;
 }) {
   const latest = history[0];
@@ -224,7 +234,7 @@ function CoachingDecision({
           </blockquote>
         ))}
       </details>
-      {baseId !== (latest?.id ?? '') && (
+      {!readOnly && baseId !== (latest?.id ?? '') && (
         <div className="rounded-lg bg-amber-50 p-3 text-sm">
           <p>
             A newer decision is available. Your draft is preserved. Read the
@@ -241,13 +251,13 @@ function CoachingDecision({
           </Button>
         </div>
       )}
-      <fieldset disabled={busy} className="space-y-3">
+      <fieldset disabled={busy || readOnly} className="space-y-3">
         <Label htmlFor={`guidance-${coaching.id}`}>Reviewed guidance</Label>
         <Textarea
           id={`guidance-${coaching.id}`}
           rows={4}
           maxLength={12000}
-          value={guidance}
+          value={readOnly ? latest?.guidance || coaching.answer : guidance}
           onChange={(e) => {
             edit();
             setGuidance(e.target.value);
@@ -256,7 +266,7 @@ function CoachingDecision({
         <Label htmlFor={`notes-${coaching.id}`}>Reason for your decision</Label>
         <Textarea
           id={`notes-${coaching.id}`}
-          value={notes}
+          value={readOnly ? (latest?.notes ?? '') : notes}
           maxLength={2000}
           onChange={(e) => {
             edit();
@@ -453,12 +463,14 @@ function PracticeCard({
   calls,
   call,
   reviews,
+  readOnly,
   onSaved,
 }: {
   assignment: PracticeAssignment;
   calls: CallRecord[];
   call: CallRecord;
   reviews: CoachingReview[];
+  readOnly: boolean;
   onSaved: () => Promise<void>;
 }) {
   const [assessment, setAssessment] = useState(''),
@@ -543,6 +555,10 @@ function PracticeCard({
         <p className="text-sm text-amber-800">
           The coaching decision was revised. Create a new assignment using the
           current approved guidance or a human assessment.
+        </p>
+      ) : readOnly ? (
+        <p className="text-sm text-slate-500">
+          A reviewer can link a follow-up assessment to this assignment.
         </p>
       ) : (
         <form

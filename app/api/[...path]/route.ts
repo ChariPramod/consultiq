@@ -9,6 +9,7 @@ const handle = (request: Request) =>
     session: sessionAccess,
     database: () => createDatabase(process.env),
     config: {
+      ANALYSIS_EXECUTION: 'queued',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       AI_MODEL: process.env.AI_MODEL,
       LANGSMITH_API_KEY: process.env.LANGSMITH_API_KEY,

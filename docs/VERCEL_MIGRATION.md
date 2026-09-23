@@ -1,3 +1,5 @@
+> Product update: [PRODUCT_RELIABILITY.md](PRODUCT_RELIABILITY.md) supersedes earlier synchronous-analysis and single-user-only descriptions. Migrations 0003/0004, team roles and the separately hosted worker are now required for this release.
+
 # Vercel migration
 
 ## What changed

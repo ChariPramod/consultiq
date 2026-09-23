@@ -77,11 +77,17 @@ export type RunTelemetry = {
 };
 export type WorkspaceData = {
   workspace: { id: string; name: string };
+  access: { role: 'owner' | 'reviewer' | 'viewer'; user_id: string };
   calls: CallRecord[];
   total: number;
   rubric: Rubric | null;
   documents: KnowledgeDocument[];
-  configuration: { scoring: boolean; tracing: boolean; model: string | null };
+  configuration: {
+    scoring: boolean;
+    tracing: boolean;
+    model: string | null;
+    queue?: boolean;
+  };
   jobs: {
     id: string;
     status: string;

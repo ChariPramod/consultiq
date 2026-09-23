@@ -1,4 +1,5 @@
 export type RuntimeConfig = {
+  ANALYSIS_EXECUTION?: 'queued';
   ANTHROPIC_API_KEY?: string;
   AI_MODEL?: string;
   LANGSMITH_API_KEY?: string;
@@ -9,6 +10,7 @@ export type RuntimeConfig = {
 };
 export function configuration(env: RuntimeConfig) {
   return {
+    queue: env.ANALYSIS_EXECUTION === 'queued',
     scoring: !!env.ANTHROPIC_API_KEY && !!env.AI_MODEL,
     tracing: env.LANGSMITH_TRACING === 'true' && !!env.LANGSMITH_API_KEY,
     model: env.AI_MODEL || null,

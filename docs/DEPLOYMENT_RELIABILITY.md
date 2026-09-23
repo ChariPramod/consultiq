@@ -1,3 +1,5 @@
+> Product update: [PRODUCT_RELIABILITY.md](PRODUCT_RELIABILITY.md) supersedes earlier synchronous-analysis and single-user-only descriptions. Migrations 0003/0004, team roles and the separately hosted worker are now required for this release.
+
 # Deployment reliability and unfinished work
 
 ## Completed in this iteration
@@ -28,7 +30,7 @@ The local diagnostic currently fails authentication, access and storage setup, a
 1. **Owner: activate the deployed workspace.** Configure Clerk publishable/secret keys, your exact Clerk user ID in the allowlist, and a Turso URL/token. Initialize the intended empty database with `npm run db:migrate`, run `npm run doctor`, then redeploy. Follow [the migration guide](VERCEL_MIGRATION.md). Retain separate preview and production databases.
 2. **Owner + engineering: prove the live workflow.** Sign in, save an approved synthetic transcript, reload it, append a review, exercise a stale-save conflict, and test isolation with two permitted accounts. Enable optional model/LangSmith keys and verify supported output plus failure handling. Existing Sites records still need an authorized export and explicit identity mapping.
 3. **Owner: supply evaluation references.** Provide the approved rubric, independently reviewed role-plays, approved coaching documents and judged question/source pairs. Establish acceptable disagreement and abstention rates before making quality claims. The code cannot author your rubric anchors or invent benchmark results.
-4. **Engineering + owner access decisions: organizations and roles.** Current accounts have independent private workspaces. Shared customer workspaces need invitations, membership, reviewer/admin permissions and offboarding, with cross-organization tests for every endpoint and retrieval path.
+4. **Engineering + owner access decisions: organizations and roles.** Current accounts support shared pilot workspaces with owner/reviewer/viewer roles. Shared customer workspaces need invitations, membership, reviewer/admin permissions and offboarding, with cross-organization tests for every endpoint and retrieval path.
 5. **Engineering: durable analysis processing.** Add a queue, cancellation, idempotent job execution, bounded retries and alerts. Current analysis runs in an HTTP request; job records and interruption guards do not guarantee execution after function termination.
 6. **Engineering + operations: restore and scale.** Implement and exercise backup/restore, retention, pagination, accessibility/browser regression coverage and load testing. An export button or a successful SQLite test is not a disaster-recovery plan.
 7. **Product validation before commercialization.** Validate buyer workflows and pricing; add billing and entitlements afterward. Audio, transcription, turn detection and real patient data remain separate, unimplemented workstreams.

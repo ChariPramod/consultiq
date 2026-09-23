@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { Operations } from './operations';
 import {
   ArrowRight,
   BookOpen,
@@ -307,7 +308,11 @@ export function Knowledge({
             )}
           </button>
         </form>
-        <button className="primary-button" onClick={() => setAddOpen(true)}>
+        <button
+          className="primary-button"
+          disabled={data.access.role !== 'owner'}
+          onClick={() => setAddOpen(true)}
+        >
           <Plus size={16} /> Add document
         </button>
       </div>
@@ -389,6 +394,7 @@ export function Knowledge({
                   </button>
                   <button
                     className="icon-button"
+                    disabled={data.access.role !== 'owner'}
                     aria-label={`Delete ${doc.title}`}
                     onClick={() => setDeleting(doc)}
                   >
@@ -408,6 +414,7 @@ export function Knowledge({
             action={
               <button
                 className="primary-button"
+                disabled={data.access.role !== 'owner'}
                 onClick={() => setAddOpen(true)}
               >
                 <Plus size={16} /> Add your first document
@@ -671,14 +678,15 @@ export function WorkspaceSettings({
           </p>
         )}
       </section>
+      {data.access.role === 'owner' && <Operations />}
       <section className="settings-boundary">
         <ShieldCheck size={21} />
         <div>
           <h3>Pilot data boundary</h3>
           <p>
             This release supports synthetic and role-play transcripts. Customer
-            invitations, audio processing, real patient data onboarding, and
-            calibrated outcome prediction are not enabled.
+            self-service admission, audio processing, real patient data
+            onboarding, and calibrated outcome prediction are not enabled.
           </p>
         </div>
       </section>

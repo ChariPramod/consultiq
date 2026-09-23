@@ -17,7 +17,14 @@
     "db:migrate": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/migrate-local.mjs",
     "check": "npm test && npm run typecheck && npm run lint && npm run build",
     "evaluate": "node --experimental-strip-types scripts/evaluate.mjs",
-    "doctor": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/doctor.mjs"
+    "doctor": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/doctor.mjs",
+    "worker": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/worker.mjs",
+    "db:backup": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/backup-workspace.mjs",
+    "db:restore": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/restore-workspace.mjs",
+    "verify:hosted": "node --env-file-if-exists=.env.local scripts/verify-hosted.mjs",
+    "evaluate:retrieval": "node --experimental-strip-types scripts/evaluate-retrieval.mjs",
+    "evaluate:gate": "node --experimental-strip-types scripts/evaluate-gate.mjs",
+    "verify:workflow": "node --env-file-if-exists=.env.local scripts/verify-hosted-workflow.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

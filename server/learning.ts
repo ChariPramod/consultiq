@@ -57,12 +57,13 @@ export class Learning {
   }
   private audit(action: string, id: string, table: string) {
     return this.q(
-      `INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) SELECT ?,?,?,?,? WHERE changes()=1 AND EXISTS (SELECT 1 FROM ${table} WHERE id=? AND workspace_id=?)`,
+      `INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at,actor_id) SELECT ?,?,?,?,?,? WHERE changes()=1 AND EXISTS (SELECT 1 FROM ${table} WHERE id=? AND workspace_id=?)`,
       crypto.randomUUID(),
       this.workspace,
       action,
       id,
       timestamp(),
+      this.repo.actorId,
       id,
       this.workspace,
     );

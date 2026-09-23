@@ -130,8 +130,17 @@ export const jobs = sqliteTable(
     telemetry: text('telemetry_json'),
     createdAt: text('created_at').notNull(),
     finishedAt: text('finished_at'),
+    requestedBy: text('requested_by'),
+    requestKey: text('request_key'),
+    payload: text('payload_json'),
+    startedAt: text('started_at'),
+    leaseUntil: text('lease_until'),
   },
-  (t) => [index('jobs_workspace_created').on(t.workspaceId, t.createdAt)],
+  (t) => [
+    index('jobs_workspace_created').on(t.workspaceId, t.createdAt),
+    uniqueIndex('jobs_workspace_request').on(t.workspaceId, t.requestKey),
+    index('jobs_status_created').on(t.status, t.createdAt),
+  ],
 );
 export const events = sqliteTable(
   'audit_events',
@@ -140,6 +149,7 @@ export const events = sqliteTable(
     workspaceId: text('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    actorId: text('actor_id'),
     action: text('action').notNull(),
     entityId: text('entity_id').notNull(),
     createdAt: text('created_at').notNull(),
@@ -207,3 +217,37 @@ export const practiceCompletions = sqliteTable('practice_completions', {
   reflection: text('reflection').notNull(),
   createdAt: text('created_at').notNull(),
 });
+
+export const members = sqliteTable(
+  'workspace_members',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
+    role: text('role').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('members_workspace_user').on(t.workspaceId, t.userId),
+    index('members_user').on(t.userId),
+  ],
+);
+export const invitations = sqliteTable(
+  'workspace_invitations',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    inviteeId: text('invitee_id').notNull(),
+    role: text('role').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: text('expires_at').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('invitations_workspace_user').on(t.workspaceId, t.inviteeId),
+  ],
+);

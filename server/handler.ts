@@ -1,10 +1,14 @@
-import { Learning } from './learning.ts';
+import { operations } from './operations.ts';
 import {
-  AppError,
-  Repository,
-  requiredText,
-  type Database,
-} from './repository.ts';
+  workspaceAccess,
+  listWorkspaces,
+  authorize,
+  Team,
+  acceptInvitation,
+} from './team.ts';
+import { enqueue, cancelJob } from './queue.ts';
+import { Learning } from './learning.ts';
+import { AppError, requiredText, type Database } from './repository.ts';
 import { configuration, type RuntimeConfig } from './config.ts';
 import { runCoaching, runScoring, type ModelCall } from './ai.ts';
 export type Runtime = RuntimeConfig & { DB: Database };
@@ -83,13 +87,46 @@ export async function handleApi(
         'storage_unavailable',
         'Workspace storage is not available.',
       );
-    const repo = await Repository.forUser(env.DB, user);
     const path = url.pathname.replace(/\/$/, '');
     const method = request.method;
+    if (path === '/api/workspaces' && method === 'GET')
+      return json({ workspaces: await listWorkspaces(env.DB, user) });
+    if (path === '/api/team/accept' && method === 'POST')
+      return json(await acceptInvitation(env.DB, user, await body(request)));
+    const { repo, role } = await workspaceAccess(
+      env.DB,
+      user,
+      request.headers.get('x-workspace-id'),
+    );
+    authorize(role, method, path);
+    if (path === '/api/operations' && method === 'GET') {
+      if (role !== 'owner')
+        throw new AppError(
+          403,
+          'access_denied',
+          'Only the workspace owner may inspect operations.',
+        );
+      return json(await operations(repo));
+    }
+    const team = new Team(repo, user, role);
+    if (path === '/api/team' && method === 'GET')
+      return json(await team.read());
+    if (path === '/api/team/invitations' && method === 'POST')
+      return json(await team.invite(await body(request)), 201);
+    const member = path.match(/^\/api\/team\/members\/([^/]+)$/);
+    if (member && method === 'DELETE')
+      return json(await team.remove(decodeURIComponent(member[1])));
+    const invitation = path.match(/^\/api\/team\/invitations\/([^/]+)$/);
+    if (invitation && method === 'DELETE')
+      return json(await team.revokeInvitation(invitation[1]));
+    const cancelled = path.match(/^\/api\/jobs\/([^/]+)\/cancel$/);
+    if (cancelled && method === 'POST')
+      return json(await cancelJob(repo, user, role, cancelled[1]));
     if (path === '/api/workspace' && method === 'GET')
       return json({
         ...(await repo.overview()),
         configuration: configuration(env),
+        access: { role, user_id: user },
       });
     if (path === '/api/workspace' && method === 'PATCH') {
       const data = (await body(request)) as { name?: unknown };
@@ -163,10 +200,41 @@ export async function handleApi(
           await repo.saveAssessment(callId, await body(request)),
           201,
         );
-      if (action === 'score' && method === 'POST')
+      if (action === 'score' && method === 'POST') {
+        if (env.ANALYSIS_EXECUTION === 'queued')
+          return json(
+            {
+              job: await enqueue(
+                repo,
+                user,
+                callId,
+                'scoring',
+                request.headers.get('idempotency-key'),
+                null,
+                env,
+              ),
+            },
+            202,
+          );
         return json(await runScoring(repo, callId, env, invoke), 201);
+      }
       if (action === 'coaching' && method === 'POST') {
         const data = (await body(request)) as { question?: unknown };
+        if (env.ANALYSIS_EXECUTION === 'queued')
+          return json(
+            {
+              job: await enqueue(
+                repo,
+                user,
+                callId,
+                'coaching',
+                request.headers.get('idempotency-key'),
+                data?.question,
+                env,
+              ),
+            },
+            202,
+          );
         return json(
           await runCoaching(repo, callId, data?.question, env, invoke),
           201,

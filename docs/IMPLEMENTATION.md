@@ -69,9 +69,9 @@ All application endpoints require authenticated identity. Mutation requests reje
 
 `server/session.ts` verifies the Clerk session; `server/access.ts` applies CONSULTIQ_ALLOWED_USER_IDS. Missing configuration denies access. The API passes the verified ID directly to the handler; caller-supplied Sites identity headers are ignored. `server/database.ts` provides atomic libSQL batches and checks foreign keys. Vercel refuses local file storage. Migrations run explicitly, never on a request or build.
 
-Workspaces are private to individual platform users. This is not organization membership or a team permission system. Vercel preview Deployment Protection supplies an additional host boundary; production domain privacy must be verified separately before promotion.
+Personal workspaces support owner-managed reviewer/viewer memberships, actor-bound invitations and revocation. Selected workspace IDs are resolved against verified identity on every request. The pilot allowlist remains an additional admission boundary. Vercel preview Deployment Protection supplies an additional host boundary; production domain privacy must be verified separately before promotion.
 
-Analysis runs during the HTTP request. A job record captures running, completed, failed and interrupted state; daily limits and duplicate-running checks constrain provider use. There is no durable queue, retry scheduler or token-cost ledger. Library and loaded-consultation limits are intentional pilot constraints, not a scaling claim.
+Hosted analysis requests now persist a queued intent and return 202. A separate privileged worker claims jobs, checks pinned inputs and requester permissions, and runs generation under a nonrenewable lease. Daily limits and duplicate-running checks constrain provider use. There is no automatic paid retry or token-cost ledger. Library and loaded-consultation limits are intentional pilot constraints, not a scaling claim.
 
 ## Observability
 
@@ -95,7 +95,7 @@ Analysis jobs now have nullable, versioned measurement data: total analysis dura
 
 ## Interrupted attempt protection
 
-AI result insertion checks the matching job ID, workspace, consultation, operation and running status atomically with the insert. Human reviews require no job. Final job updates only affect running rows, so a late completion cannot overwrite interrupted state. Stale recovery still happens during new admission, not on a scheduler. Result persistence, successful-save audit and job completion now share a transaction; this is not durable background processing or exactly-once provider execution. See [the handoff](PROJECT_HANDOFF.md).
+AI result insertion checks the matching job ID, workspace, consultation, operation and running status atomically with the insert. Human reviews require no job. Final job updates only affect running rows, so a late completion cannot overwrite interrupted state. Queued-worker lease recovery happens on dispatch. The legacy direct orchestration test path also supports stale recovery during admission. Result persistence, successful-save audit and job completion now share a transaction; the queue stores durable execution intent but cannot guarantee exactly-once execution at the provider. See [the handoff](PROJECT_HANDOFF.md).
 
 Successful AI persistence now commits the result, audit event and completed job status in one transaction. The validation/save timing includes this transaction. Optional telemetry is saved afterward; storage failure can leave measurements unavailable without failing the saved result.
 
@@ -106,3 +106,7 @@ Successful AI persistence now commits the result, audit event and completed job 
 ## Runtime recovery and setup checks
 
 `server/runtime.ts` owns verified session admission, connection lifecycle and sanitized infrastructure failures. The runtime opens storage only after authorization, and a close failure cannot mask a committed response. `app/workspace/error.tsx` provides retry navigation for rendering failures without exposing raw errors. `npm run doctor` checks required setup and migration checksums without querying workspace records; it is an operator tool, not an HTTP endpoint. See [Deployment reliability](DEPLOYMENT_RELIABILITY.md) for boundaries and unfinished work.
+
+## Team, queue and operations boundaries
+
+`server/team.ts` resolves membership and enforces roles. `server/queue.ts` handles idempotent admission, atomic claims, cancellation and lease recovery. `server/worker-auth.ts` protects remote dispatch; the worker never accepts a caller-selected workspace. `server/operations.ts` returns owner-only workspace aggregates. Retrieval uses shared `lib/retrieval.ts` ranking. New persistence is migrations 0003 and 0004. Read [PRODUCT_RELIABILITY.md](PRODUCT_RELIABILITY.md) for deployment requirements and limits.

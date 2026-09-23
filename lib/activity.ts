@@ -1,5 +1,11 @@
 import type { WorkspaceData } from './product.ts';
-export type ActivityFilter = 'all' | 'running' | 'completed' | 'failed';
+export type ActivityFilter =
+  | 'all'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 export function filterActivity(
   data: Pick<WorkspaceData, 'jobs' | 'calls'>,
   filter: ActivityFilter,

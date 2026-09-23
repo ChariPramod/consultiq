@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createDatabase, databaseConfig } from '../server/database.ts';
-import { migrate } from '../scripts/migrate-local.mjs';
+import { migrate, readMigrations } from '../scripts/migrate-local.mjs';
 
 async function database(t) {
   const directory = await mkdtemp(join(tmpdir(), 'consultiq-libsql-'));
@@ -94,8 +94,9 @@ test('adapter batches rollback on a later failure and preserve changes-gated aud
 
 test('real migration schema enforces foreign keys and cascades across persistent reopen', async (t) => {
   const { db, env } = await database(t);
-  assert.deepEqual(await migrate(db.client), { applied: 3, total: 3 });
-  assert.deepEqual(await migrate(db.client), { applied: 0, total: 3 });
+  const total = (await readMigrations()).length;
+  assert.deepEqual(await migrate(db.client), { applied: total, total });
+  assert.deepEqual(await migrate(db.client), { applied: 0, total });
   await db
     .prepare('INSERT INTO workspaces VALUES (?,?,?,?)')
     .bind('workspace', 'owner', 'Private', '2026-09-22')
@@ -162,10 +163,12 @@ test('migration drift and a failing new migration leave schema and ledger intact
   await writeFile(originalPath, `${original}\n-- changed history`);
   await assert.rejects(migrate(db.client, migrations), /history differs/);
   await writeFile(originalPath, original);
-  journal.entries.push({ idx: 3, tag: '0003_test_failure' });
+  const total = journal.entries.length;
+  const tag = String(total).padStart(4, '0') + '_test_failure';
+  journal.entries.push({ idx: total, tag });
   await writeFile(journalPath, JSON.stringify(journal));
   await writeFile(
-    join(migrations, '0003_test_failure.sql'),
+    join(migrations, tag + '.sql'),
     'CREATE TABLE rollback_test(id TEXT);\n--> statement-breakpoint\nINSERT INTO absent_table VALUES (1);',
   );
   await assert.rejects(migrate(db.client, migrations));
@@ -181,6 +184,6 @@ test('migration drift and a failing new migration leave schema and ledger intact
         .prepare('SELECT COUNT(*) AS count FROM consultiq_migrations')
         .first()
     ).count,
-    3,
+    total,
   );
 });

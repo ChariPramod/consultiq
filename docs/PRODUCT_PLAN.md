@@ -17,7 +17,9 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | RAG coaching | Implemented with approved-document keyword retrieval and checked citations |
 | LangSmith | Nested model and validation/save tracing implemented, optional, content excluded |
 | Coaching review and practice | Implemented in the private workspace with pinned human-reviewed comparisons |
-| Customer organizations and billing | Pending |
+| Team access | Owner/reviewer/viewer membership, invitations and revocation implemented; pilot allowlist retained |
+| Background analysis | Persistent queue, separate worker, cancellation and lease fences implemented; worker deployment pending |
+| Customer self-service and billing | Pending |
 | Audio, transcription, real patient data | Pending and outside current ingestion scope |
 | Offline evaluation infrastructure | Implemented; supplied references required, no validated domain benchmark |
 | Predictive outcome models and model-quality benchmarks | Pending; no performance claims |
@@ -32,8 +34,8 @@ The original plan proposed a separate Python service and Postgres. The applicati
 
 1. Validate the rubric with independently reviewed role-plays. Record disagreements and decide acceptable error levels before advertising AI quality.
 2. Complete live provider and tracing verification using owner credentials. Add evaluated fixtures, structured feedback, and release comparisons tied to prompt, rubric, and model versions.
-3. Implement the agreed customer access model: organizations, membership, invitations, role-based access, and offboarding. Test every resource and retrieval operation across organizations.
-4. Move long-running analysis to a durable queue with retry policy, cancellation, idempotency, and operational alerts. The current job table records synchronous requests; it is not a background queue.
+3. Verify implemented team membership, invitations, role enforcement and offboarding in the hosted environment. Extend pilot admission to customer self-service only after policy is agreed.
+4. Deploy and monitor the implemented persistent queue worker. Verify cancellation, duplicate dispatch and lease interruption with the live provider. Automatic paid retries remain deliberately disabled; add external alerts and measured throughput capacity.
 5. Add pagination and aggregated queries before exceeding the current pilot limits. The UI reports when records are limited; exports reflect loaded records.
 6. Establish backup and restore procedures, retention automation, incident response, accessibility and browser regression checks, and load testing.
 
@@ -54,3 +56,5 @@ Measure retrieval failures before adding infrastructure. A sensible next increme
 Do not call the product commercially ready because the build passes. A release needs evidence that target users can complete the workflow, that evaluations meet the agreed bar, and that access, operations, support, and data obligations match the customer contract. This repository provides the implemented foundation and a concrete path to that decision.
 
 The active implementation sequence and completion evidence are tracked in [Iteration plan](ITERATION_PLAN.md).
+
+The team/queue/evaluation/operations increment is detailed in [Product reliability](PRODUCT_RELIABILITY.md); implementation is not a claim of completed live acceptance.

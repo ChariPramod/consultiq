@@ -1,3 +1,4 @@
+import { retrievalTokens, rankRetrievedChunks } from '../lib/retrieval.ts';
 import type { AnalysisTelemetry } from './telemetry.ts';
 import {
   parseTurns,
@@ -52,7 +53,13 @@ const readRubric = (row: Record<string, unknown>): Rubric =>
 export class Repository {
   db: Database;
   workspaceId: string;
-  constructor(db: Database, workspaceId: string) {
+  actorId: string | null;
+  constructor(
+    db: Database,
+    workspaceId: string,
+    actorId: string | null = null,
+  ) {
+    this.actorId = actorId;
     this.db = db;
     this.workspaceId = workspaceId;
   }
@@ -79,19 +86,20 @@ export class Repository {
         'storage_unavailable',
         'Your workspace could not be opened.',
       );
-    return new Repository(db, workspace.id);
+    return new Repository(db, workspace.id, userId);
   }
   statement(sql: string, ...params: unknown[]) {
     return this.db.prepare(sql).bind(...params);
   }
   event(action: string, entityId: string) {
     return this.statement(
-      'INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) VALUES (?,?,?,?,?)',
+      'INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at,actor_id) VALUES (?,?,?,?,?,?)',
       id(),
       this.workspaceId,
       action,
       entityId,
       now(),
+      this.actorId,
     );
   }
   async rubric(rubricId?: string) {
@@ -161,7 +169,7 @@ export class Repository {
           this.workspaceId,
         ).all<KnowledgeDocument>(),
         this.statement(
-          'SELECT id,call_id,kind,status,error_code,created_at,telemetry_json FROM analysis_jobs WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 20',
+          "SELECT id,call_id,kind,status,error_code,created_at,telemetry_json FROM analysis_jobs WHERE workspace_id=? ORDER BY CASE WHEN status IN ('queued','running') THEN 0 ELSE 1 END,created_at DESC,rowid DESC LIMIT 200",
           this.workspaceId,
         ).all<
           Omit<WorkspaceData['jobs'][number], 'telemetry'> & {
@@ -343,7 +351,7 @@ export class Repository {
     const createdAt = now();
     const [result] = await this.db.batch([
       this.statement(
-        `INSERT INTO assessments (id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND COALESCE((SELECT id FROM assessments WHERE call_id=? AND workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1),'')=? AND (?='human' OR EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='scoring' AND status='running'))`,
+        `INSERT INTO assessments (id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND COALESCE((SELECT id FROM assessments WHERE call_id=? AND workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1),'')=? AND (?='human' OR EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='scoring' AND status='running' AND (lease_until IS NULL OR lease_until>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))`,
         assessmentId,
         this.workspaceId,
         callId,
@@ -364,11 +372,12 @@ export class Repository {
         callId,
       ),
       this.statement(
-        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) SELECT ?,?,'assessment_saved',?,? WHERE EXISTS (SELECT 1 FROM assessments WHERE id=? AND workspace_id=?)",
+        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at,actor_id) SELECT ?,?,'assessment_saved',?,?,? WHERE EXISTS (SELECT 1 FROM assessments WHERE id=? AND workspace_id=?)",
         id(),
         this.workspaceId,
         assessmentId,
         now(),
+        this.actorId,
         assessmentId,
         this.workspaceId,
       ),
@@ -476,34 +485,10 @@ export class Repository {
     return { deleted: true };
   }
   async retrieve(query: string) {
-    const stop = new Set([
-      'the',
-      'and',
-      'for',
-      'with',
-      'that',
-      'this',
-      'what',
-      'how',
-      'can',
-      'should',
-      'our',
-      'about',
-      'from',
-      'have',
-      'into',
-      'when',
-      'would',
-      'could',
-    ]);
-    const tokens = [
-      ...new Set(query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []),
-    ]
-      .filter((t) => !stop.has(t))
-      .slice(0, 12);
+    const tokens = retrievalTokens(query);
     if (!tokens.length) return [];
     const rows = await this.statement(
-      `SELECT k.id AS chunk_id,k.document_id,k.body,d.title FROM knowledge_chunks k JOIN knowledge_documents d ON d.id=k.document_id AND d.workspace_id=k.workspace_id WHERE k.workspace_id=? AND (${tokens.map(() => 'instr(lower(k.body),?)>0').join(' OR ')}) LIMIT 120`,
+      `SELECT k.id AS chunk_id,k.document_id,k.body,d.title FROM knowledge_chunks k JOIN knowledge_documents d ON d.id=k.document_id AND d.workspace_id=k.workspace_id WHERE k.workspace_id=? AND (${tokens.map(() => 'instr(lower(k.body),?)>0').join(' OR ')}) ORDER BY k.id LIMIT 120`,
       this.workspaceId,
       ...tokens,
     ).all<{
@@ -512,17 +497,7 @@ export class Repository {
       body: string;
       title: string;
     }>();
-    return rows.results
-      .map((row) => ({
-        ...row,
-        relevance: tokens.filter((t) => row.body.toLowerCase().includes(t))
-          .length,
-      }))
-      .sort(
-        (a, b) =>
-          b.relevance - a.relevance || a.chunk_id.localeCompare(b.chunk_id),
-      )
-      .slice(0, 5);
+    return rankRetrievedChunks(rows.results, tokens);
   }
   async beginJob(callId: string, kind: string, limit: number) {
     await this.getCall(callId);
@@ -629,7 +604,7 @@ export class Repository {
     const runId = id();
     const [saved] = await this.db.batch([
       this.statement(
-        `INSERT INTO coaching_runs (id,workspace_id,call_id,question,answer,citations,model,prompt_version,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND ${sourceChecks.join(' AND ')} AND EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='coaching' AND status='running')`,
+        `INSERT INTO coaching_runs (id,workspace_id,call_id,question,answer,citations,model,prompt_version,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM consultations WHERE id=? AND workspace_id=?) AND ${sourceChecks.join(' AND ')} AND EXISTS (SELECT 1 FROM analysis_jobs WHERE id=? AND workspace_id=? AND call_id=? AND kind='coaching' AND status='running' AND (lease_until IS NULL OR lease_until>strftime('%Y-%m-%dT%H:%M:%fZ','now')))`,
         runId,
         this.workspaceId,
         callId,
@@ -651,11 +626,12 @@ export class Repository {
         callId,
       ),
       this.statement(
-        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at) SELECT ?,?,'coaching_saved',?,? WHERE EXISTS (SELECT 1 FROM coaching_runs WHERE id=? AND workspace_id=?)",
+        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at,actor_id) SELECT ?,?,'coaching_saved',?,?,? WHERE EXISTS (SELECT 1 FROM coaching_runs WHERE id=? AND workspace_id=?)",
         id(),
         this.workspaceId,
         runId,
         now(),
+        this.actorId,
         runId,
         this.workspaceId,
       ),

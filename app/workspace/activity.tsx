@@ -19,6 +19,7 @@ import {
   recoveryMessage,
   type ActivityFilter,
 } from '@/lib/activity';
+import { api } from '@/lib/api';
 import type { WorkspaceData } from '@/lib/product';
 export function AnalysisActivity({
   data,
@@ -87,7 +88,11 @@ export function AnalysisActivity({
         </div>
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           {[
-            { label: 'In progress', value: count('running'), icon: Clock3 },
+            {
+              label: 'In progress',
+              value: count('running') + count('queued'),
+              icon: Clock3,
+            },
             { label: 'Completed', value: count('completed'), icon: CheckCheck },
             {
               label: 'Needs attention',
@@ -111,7 +116,8 @@ export function AnalysisActivity({
         </div>
         <p className="mt-4 text-sm text-slate-400">
           Counts cover the latest {data.jobs.length} loaded runs, up to 20.
-          Refresh to check for changes.
+          Refresh to check for changes. Queued runs require a configured
+          background worker; closing this page does not cancel them.
         </p>
       </div>
       {error && (
@@ -127,7 +133,16 @@ export function AnalysisActivity({
           aria-label="Filter analysis status"
           className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1"
         >
-          {(['all', 'running', 'completed', 'failed'] as const).map((value) => (
+          {(
+            [
+              'all',
+              'queued',
+              'running',
+              'completed',
+              'failed',
+              'cancelled',
+            ] as const
+          ).map((value) => (
             <Button
               key={value}
               variant={filter === value ? 'default' : 'ghost'}
@@ -140,7 +155,11 @@ export function AnalysisActivity({
                   ? 'In progress'
                   : value === 'failed'
                     ? 'Failed'
-                    : 'Completed'}
+                    : value === 'queued'
+                      ? 'Queued'
+                      : value === 'cancelled'
+                        ? 'Cancelled'
+                        : 'Completed'}
             </Button>
           ))}
         </fieldset>
@@ -216,6 +235,12 @@ export function AnalysisActivity({
                     'Not reported'}
                 </span>
               </div>
+              {job.status === 'cancelled' && (
+                <p className="mt-3 text-sm text-slate-600">
+                  Cancelled. An already dispatched provider request may still
+                  incur usage.
+                </p>
+              )}
               {job.status === 'failed' && (
                 <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-relaxed text-amber-950">
                   <strong className="block">
@@ -228,6 +253,31 @@ export function AnalysisActivity({
                 <Button variant="outline" onClick={() => openCall(job.call_id)}>
                   Open consultation <ArrowUpRight size={15} />
                 </Button>
+                {(job.status === 'queued' || job.status === 'running') &&
+                  data.access.role !== 'viewer' && (
+                    <Button
+                      variant="outline"
+                      disabled={refreshing}
+                      onClick={async () => {
+                        setRefreshing(true);
+                        setError('');
+                        try {
+                          await api(`jobs/${job.id}/cancel`, 'POST', {});
+                          await reload();
+                        } catch (e) {
+                          setError(
+                            e instanceof Error
+                              ? e.message
+                              : 'Could not cancel the run.',
+                          );
+                        } finally {
+                          setRefreshing(false);
+                        }
+                      }}
+                    >
+                      Cancel run
+                    </Button>
+                  )}
                 {job.status === 'failed' && (
                   <Button variant="ghost" onClick={openLibrary}>
                     Browse approved guidance

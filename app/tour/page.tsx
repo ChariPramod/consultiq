@@ -72,8 +72,9 @@ export default function TourPage() {
             <p className="mt-3 leading-relaxed text-[#53696b]">
               Hosted sign-in and storage require owner configuration and
               verification. AI quality needs an approved rubric and
-              independently reviewed examples. Shared teams, billing, audio
-              transcription and live call support are not implemented.
+              independently reviewed examples. Team access needs configured
+              pilot accounts. Billing, audio transcription and live call support
+              are not implemented.
             </p>
           </div>
         </section>

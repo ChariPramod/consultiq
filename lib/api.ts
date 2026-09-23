@@ -1,3 +1,17 @@
+const WORKSPACE_KEY = 'consultiq.workspace';
+export function selectedWorkspace(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(WORKSPACE_KEY);
+  } catch {
+    return null;
+  }
+}
+export function selectWorkspace(id: string) {
+  // A complete navigation clears every consultation draft and pending view.
+  window.sessionStorage.setItem(WORKSPACE_KEY, id);
+  window.location.assign('/workspace');
+}
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -20,8 +34,18 @@ export async function api<T>(
       credentials: 'same-origin',
       signal: AbortSignal.timeout(70000),
     };
+    const headers: Record<string, string> = {};
+    const workspace = selectedWorkspace();
+    if (workspace && path !== 'workspaces' && path !== 'team/accept')
+      headers['X-Workspace-Id'] = workspace;
+    if (
+      method === 'POST' &&
+      /^consultations\/[^/]+\/(score|coaching)$/.test(path)
+    )
+      headers['Idempotency-Key'] = crypto.randomUUID();
+    options.headers = headers;
     if (method !== 'GET' && body !== undefined) {
-      options.headers = { 'Content-Type': 'application/json' };
+      headers['Content-Type'] = 'application/json';
       options.body = JSON.stringify(body);
     }
     response = await send(`/api/${path}`, options);

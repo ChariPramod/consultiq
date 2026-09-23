@@ -71,3 +71,69 @@ An independent-human label in metadata is a declaration, not a provenance guaran
 ## Validation
 
 `tests/evaluation.test.mjs` exercises abstention denominators, numeric errors, quote rejection, malformed inputs, aggregate-only output, deterministic results and CLI overwrite/error behavior. Run `npm test` or the normal `npm run check` gate. No paid model or LangSmith credentials are required for these tests.
+
+## Assessment regression gate
+
+The gate recomputes both candidate and baseline from raw datasets through the production evidence validator. It does not trust edited report metrics. Run:
+
+```sh
+node --experimental-strip-types scripts/evaluate-gate.mjs /restricted/candidate.json /restricted/baseline.json /restricted/policy.json /restricted/new-decision.json
+```
+
+Exit codes: `0` passed, `2` valid evaluation that failed its gate, `1` invalid input or report-write failure. Reports never overwrite an existing file. Inputs are limited to 25 MiB each. The output includes hashes of each input, an immutable-case fingerprint, aggregate reports, explicit decision reasons and the policy.
+
+A policy must supply exactly these fields; no default product acceptance bar is invented:
+
+- `schema_version`: `1`.
+- `purpose`: `release` or `engineering`. Release decisions require declared `independent_human` references and a `held_out` split. Engineering decisions are not release approval.
+- `minimum_cases`: positive integer.
+- `minimum_mutually_scored_per_dimension`: positive integer required in **both** baseline and candidate for every dimension.
+- `maximum_mean_absolute_error`: number from 0 to 4.
+- `minimum_reference_score_recall`: number from 0 to 1. Recall here means supported numeric predictions on reference-scored opportunities, divided by reference-scored opportunities.
+- `maximum_unsupported_scoring_rate`: number from 0 to 1; predictions scored where references abstain, divided by all opportunities. This is reference disagreement, not proof of semantic invalidity.
+- `maximum_mae_regression`: allowed increase in numeric mean absolute error, from 0 to 4.
+- `maximum_recall_regression`: allowed decrease in reference-score recall, from 0 to 1.
+
+Absolute and regression thresholds apply to **each dimension**, preventing a strong aggregate from hiding a weak dimension. A missing denominator fails the gate. Dataset, reference, rubric, provenance and split versions must agree. Case IDs, transcript turns and reference labels are fingerprinted and must be identical across baseline and candidate (case and reference-dimension ordering may change). Model and prompt versions may differ. Changing a rubric or reference set requires a new evaluation baseline, not comparison of incomparable scores. The policy itself must be approved and frozen before evaluating a release.
+
+These gates control measurable regressions, not benchmark provenance or statistical significance. A small passing test set cannot establish commercial safety. Provider errors must be retained in the prepared prediction set as abstentions or cause the evaluation pipeline to fail; dropping failed cases makes results misleading. The CLI evaluates existing predictions and does not run provider calls.
+
+## Judged retrieval evaluation
+
+```sh
+node --experimental-strip-types scripts/evaluate-retrieval.mjs /restricted/retrieval.json /restricted/new-retrieval-report.json
+```
+
+Contract:
+
+```json
+{
+  "schema_version": 1,
+  "metadata": {
+    "dataset_version": "engineering-example-v1",
+    "reference_version": "engineering-example-v1",
+    "reference_source": "synthetic_engineering",
+    "split": "development"
+  },
+  "chunks": [
+    { "chunk_id": "passage-a", "body": "Synthetic passage about appointment scheduling." },
+    { "chunk_id": "passage-b", "body": "Synthetic passage about budget planning." }
+  ],
+  "queries": [{
+    "id": "question-a",
+    "text": "appointment scheduling",
+    "judgments": [
+      { "chunk_id": "passage-a", "grade": 3 },
+      { "chunk_id": "passage-b", "grade": 0 }
+    ]
+  }]
+}
+```
+
+This example tests engineering behavior only. For a real dataset, use approved corpus chunks and independent relevance judgments. Grades are integers 0–3: zero means irrelevant; positive grades indicate increasing judged relevance. Every query must judge **every chunk exactly once**, including irrelevant chunks. Missing judgments fail; unjudged documents are never silently treated as irrelevant. IDs are unique opaque identifiers. Limits are 10,000 chunks, 1,000 queries, 10,000 characters per chunk and 2,000 per query, additionally constrained by the CLI file-size limit.
+
+The evaluator shares production tokenization and ranking, the matching-candidate cap of 120 in chunk-ID order, and top-five results. It evaluates chunk retrieval, not document deduplication or answer quality. Include queries with no relevant source to measure unsafe retrieval rather than only answerable questions.
+
+Reports contain no query, chunk text or case identifiers. Metrics are macro averages over answerable queries: recall@5, precision@5 (fixed denominator five, including missing slots), reciprocal rank@5, and normalized discounted cumulative gain@5 with gain `2^grade - 1`. No-answer queries are reported separately through false-positive rate: any returned passage for an all-zero query is a false positive. A metric is null when its query denominator is absent. Tokenless or empty-result answerable queries count as misses. A matching keyword alone does not prove the passage answers the question; independent judgments supply that distinction.
+
+Retrieval quality thresholds and comparative release gating remain owner-defined; this command reports measurements and validates the dataset rather than declaring retrieval acceptable. Evaluation uses an isolated supplied corpus, not a live workspace or cross-workspace export. Workspace isolation is exercised separately by API/database tests.

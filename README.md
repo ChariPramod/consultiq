@@ -35,17 +35,17 @@ npm run doctor
 ## What is included
 
 - A responsive landing page and application using shadcn/Base UI components.
-- Private per-user workspaces, saved transcripts, recorded outcomes, filtering, and CSV export.
+- Personal and shared workspaces with owner/reviewer/viewer access, scoped transcripts, recorded outcomes, filtering, and CSV export.
 - Owner-approved rubric versions and append-only assessment revisions.
 - Quote validation against the cited transcript turn; unsupported scores remain unscored.
-- Optional server-side Claude analysis, tracked analysis jobs, and daily request limits.
+- Optional Claude analysis through a persistent queue, separate worker, cancellation, lease recovery and daily request limits.
 - Saved analysis timings and reported input/output tokens, including available usage on failures.
 - Approved document ingestion, keyword retrieval, and citation-validated RAG coaching.
 - Append-only coaching decisions, manual practice assignments and pinned human-reviewed follow-up comparisons.
 - Optional LangSmith tracing with separate model and validation/save stages; content and raw errors excluded.
 - Offline assessment evaluation against independently supplied references, with coverage and abstention reporting.
 
-There are no seeded customer records, fabricated performance metrics, or acceptance predictions. AI controls remain unavailable until configured. Real patient recordings, team invitations, billing, semantic vector retrieval, and validated model-quality benchmarks are not implemented.
+There are no seeded customer records, fabricated performance metrics, or acceptance predictions. AI controls remain unavailable until configured. Real patient recordings, billing, semantic vector retrieval, and validated model-quality benchmarks are not implemented. Team invitations retain a deployment-level pilot allowlist. Worker hosting and live acceptance checks require configuration.
 
 Evaluate a prepared dataset without provider calls:
 
@@ -62,6 +62,10 @@ The runtime now targets official Next.js on Vercel, with Clerk authentication an
 ## Presenting the project
 
 Use the public `/tour` walkthrough to explain the workflow and exercise the actual quote validator against clearly labeled synthetic content. It makes no AI calls and saves no records. See [the presentation guide](docs/PRESENTATION_GUIDE.md) for a five-minute script, technical talking points and the remaining live-workflow checks.
+
+## Product reliability
+
+See [the team, background processing, evaluation and operations implementation](docs/PRODUCT_RELIABILITY.md). Apply migrations 0003 and 0004 before authenticated use of this release. The queue requires a supervised `npm run worker` process or secured scheduler; queuing a job alone does not execute it.
 
 ## Project documentation
 

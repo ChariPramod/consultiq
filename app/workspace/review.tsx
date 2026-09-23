@@ -65,11 +65,17 @@ export default function Review({
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
   const [tab, setTab] = useState('transcript');
   const [highlight, setHighlight] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historical, setHistorical] = useState<SavedAssessment | null>(null);
+  const viewer = data.access.role === 'viewer';
+  const jobRevision = data.jobs
+    .filter((job) => job.call_id === callId)
+    .map((job) => `${job.id}:${job.status}`)
+    .join(',');
   const reload = useCallback(async () => {
     try {
       const result = await api<Detail>(`consultations/${callId}`);
@@ -100,7 +106,7 @@ export default function Review({
     return () => {
       active = false;
     };
-  }, [callId]);
+  }, [callId, jobRevision]);
   useEffect(() => {
     if (tab === 'transcript' && highlight !== null) {
       const timer = setTimeout(
@@ -130,7 +136,7 @@ export default function Review({
             </button>
           </div>
         ) : (
-          <output className="product-loading">
+          <output className="block product-loading">
             <LoaderCircle className="spin" size={21} /> Loading consultation
           </output>
         )}
@@ -140,11 +146,20 @@ export default function Review({
   const assessment = historical ?? call.latest;
   return (
     <>
+      {notice && (
+        <output className="block mb-4 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+          {notice}
+        </output>
+      )}
       <div className="review-navigation">
         <button className="text-button" onClick={onBack}>
           <ArrowLeft size={15} /> All consultations
         </button>
-        <button className="danger-link" onClick={() => setDeleteOpen(true)}>
+        <button
+          disabled={data.access.role !== 'owner'}
+          className="danger-link"
+          onClick={() => setDeleteOpen(true)}
+        >
           <Trash2 size={15} /> Delete consultation
         </button>
       </div>
@@ -174,7 +189,7 @@ export default function Review({
             Recorded outcome
             <NativeSelect
               value={call.outcome}
-              disabled={busy}
+              disabled={busy || viewer}
               onChange={async (e) => {
                 setBusy(true);
                 try {
@@ -204,23 +219,34 @@ export default function Review({
           <div>
             <button
               className="secondary-button"
-              disabled={busy || !data.rubric}
+              disabled={busy || viewer || !data.rubric}
               onClick={() => setEditOpen(true)}
             >
               <Pencil size={15} /> Human assessment
             </button>
             <button
               className="primary-button"
-              disabled={busy || !data.configuration.scoring || !data.rubric}
+              disabled={
+                busy ||
+                viewer ||
+                !data.configuration.scoring ||
+                !data.rubric ||
+                data.jobs.some(
+                  (job) =>
+                    job.call_id === callId &&
+                    job.kind === 'scoring' &&
+                    ['queued', 'running'].includes(job.status),
+                )
+              }
               onClick={async () => {
                 setBusy(true);
                 setError('');
                 try {
                   await api(`consultations/${callId}/score`, 'POST', {});
-                  await reload();
+                  setNotice(
+                    'Assessment queued. You can leave this page; check Analysis activity for progress and cancellation.',
+                  );
                   await onChanged();
-                  setHistorical(null);
-                  setTab('assessment');
                 } catch (e) {
                   setError(e instanceof Error ? e.message : 'Analysis failed.');
                 } finally {
@@ -229,7 +255,7 @@ export default function Review({
               }}
             >
               {busy ? (
-                <Busy>Processing</Busy>
+                <Busy>Submitting</Busy>
               ) : (
                 <>
                   <Sparkles size={15} /> Run assessment
@@ -428,6 +454,7 @@ export default function Review({
                 action={
                   <button
                     className="primary-button"
+                    disabled={viewer}
                     onClick={() =>
                       data.rubric ? setEditOpen(true) : onConfigure()
                     }
@@ -442,6 +469,7 @@ export default function Review({
         </TabsContent>
         <TabsContent value="practice">
           <LearningWorkspace
+            readOnly={viewer}
             call={call}
             coaching={detail.coaching}
             calls={data.calls}
@@ -457,7 +485,7 @@ export default function Review({
         <TabsContent value="coaching">
           <CoachingPanel
             callId={callId}
-            enabled={data.configuration.scoring}
+            enabled={data.configuration.scoring && !viewer}
             coaching={detail.coaching}
             onSaved={async () => {
               await reload();
@@ -897,11 +925,17 @@ function CoachingPanel({
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [sources, setSources] = useState<
     { chunk_id: string; title: string; body: string }[] | null
   >(null);
   return (
     <div className="coaching-workspace">
+      {notice && (
+        <output className="block rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+          {notice}
+        </output>
+      )}
       <section className="product-panel coaching-question">
         <div className="product-panel-heading">
           <div>
@@ -919,11 +953,15 @@ function CoachingPanel({
             e.preventDefault();
             setBusy(true);
             setError('');
+            setNotice('');
             try {
               if (enabled) {
                 await api(`consultations/${callId}/coaching`, 'POST', {
                   question,
                 });
+                setNotice(
+                  'Coaching queued. Check Analysis activity for progress or cancellation. Validated answers appear here after completion.',
+                );
                 await onSaved();
                 setSources(null);
               } else {
@@ -959,7 +997,7 @@ function CoachingPanel({
           >
             {busy ? (
               <Busy>
-                {enabled ? 'Preparing guidance' : 'Searching sources'}
+                {enabled ? 'Submitting request' : 'Searching sources'}
               </Busy>
             ) : (
               <>

@@ -82,3 +82,84 @@ test('activity filtering searches only supplied loaded workspace records', () =>
   assert.match(recoveryMessage('interrupted'), /check saved results/);
   assert.match(recoveryMessage('unknown'), /Manual review/);
 });
+
+test('workspace selection scopes requests but not membership discovery or invitation acceptance', async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    sessionStorage: { getItem: () => 'workspace-selected' },
+  };
+  try {
+    const seen = [];
+    const send = async (url, options) => {
+      seen.push({ url, headers: options.headers });
+      return Response.json({});
+    };
+    await api('workspace', 'GET', undefined, send);
+    await api('workspaces', 'GET', undefined, send);
+    await api('team/accept', 'POST', { token: 'invitation' }, send);
+    await api('consultations/c/score', 'POST', {}, send);
+    await api('consultations/c/score', 'POST', {}, send);
+    assert.equal(seen[0].headers['X-Workspace-Id'], 'workspace-selected');
+    assert.equal(seen[1].headers['X-Workspace-Id'], undefined);
+    assert.equal(seen[2].headers['X-Workspace-Id'], undefined);
+    assert.equal(seen[3].headers['X-Workspace-Id'], 'workspace-selected');
+    assert.match(seen[3].headers['Idempotency-Key'], /^[a-f0-9-]{36}$/);
+    assert.notEqual(
+      seen[3].headers['Idempotency-Key'],
+      seen[4].headers['Idempotency-Key'],
+    );
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test('unavailable browser storage falls back to the server-selected personal workspace', async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    sessionStorage: {
+      getItem() {
+        throw new Error('Storage blocked');
+      },
+    },
+  };
+  try {
+    await api('workspace', 'GET', undefined, async (_url, options) => {
+      assert.equal(options.headers['X-Workspace-Id'], undefined);
+      return Response.json({});
+    });
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test('queued and cancelled analysis runs can be inspected independently', () => {
+  const data = {
+    calls: [],
+    jobs: [
+      {
+        id: 'q',
+        call_id: 'c',
+        kind: 'scoring',
+        status: 'queued',
+        error_code: null,
+      },
+      {
+        id: 'x',
+        call_id: 'c',
+        kind: 'scoring',
+        status: 'cancelled',
+        error_code: null,
+      },
+    ],
+  };
+  assert.deepEqual(
+    filterActivity(data, 'queued', '').map((job) => job.id),
+    ['q'],
+  );
+  assert.deepEqual(
+    filterActivity(data, 'cancelled', '').map((job) => job.id),
+    ['x'],
+  );
+});
