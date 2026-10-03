@@ -37,9 +37,11 @@ npm run doctor
 - A responsive landing page and application using shadcn/Base UI components.
 - Personal and shared workspaces with owner/reviewer/viewer access, scoped transcripts, recorded outcomes, filtering, and CSV export.
 - Owner-approved rubric versions and append-only assessment revisions.
+- Side-by-side revision comparisons, preserved editing sessions and retained evidence citations.
 - Quote validation against the cited transcript turn; unsupported scores remain unscored.
 - Optional Claude analysis through a persistent queue, separate worker, cancellation, lease recovery and daily request limits.
 - Saved analysis timings and reported input/output tokens, including available usage on failures.
+- Full-workspace analysis history with filters, pagination and permission-aware cancellation.
 - Approved document ingestion with duplicate-content prevention, keyword retrieval, and citation-validated RAG coaching.
 - Append-only coaching decisions, manual practice assignments and pinned human-reviewed follow-up comparisons.
 - Paginated follow-up search across the workspace and owner-only storage usage by area and table.
@@ -73,6 +75,8 @@ Use the public `/tour` walkthrough to explain the workflow and exercise the actu
 The [overall architecture and query/response diagrams](docs/ARCHITECTURE.md) describe the current Next.js, Clerk, Turso and background-worker paths, including failure handling. Editable Mermaid sources and rendered SVGs are included.
 
 [Storage and query optimization](docs/STORAGE_QUERY_OPTIMIZATION.md) documents the new indexes, atomic library deduplication, storage inventory, follow-up search and reproducible local query-plan measurements. Apply all pending migrations through **0006** before authenticated use. Existing documents, citation IDs and review history are preserved.
+
+[Review comparison and operational recovery](docs/REVIEW_OPERATIONS_ITERATION.md) adds comparison tools, paginated analysis history, citation-preserving drafts and recovery for confirmed writes followed by failed refreshes. Malformed measurement records no longer block the dashboard. No additional migration is required.
 
 ## Pilot workflow additions
 

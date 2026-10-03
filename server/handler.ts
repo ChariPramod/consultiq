@@ -1,4 +1,5 @@
 import { storageUsage } from './storage.ts';
+import { queryJobs } from './job-query.ts';
 import { queryFollowupCandidates } from './followup-candidates.ts';
 import { workspaceInsights } from './insights.ts';
 import { queryPracticeInbox } from './practice-inbox.ts';
@@ -106,6 +107,8 @@ export async function handleApi(
       request.headers.get('x-workspace-id'),
     );
     authorize(role, method, path);
+    if (path === '/api/jobs' && method === 'GET')
+      return json(await queryJobs(repo, url.searchParams, role));
     if (path === '/api/insights' && method === 'GET')
       return json(await workspaceInsights(repo));
     if (path === '/api/practice' && method === 'GET')

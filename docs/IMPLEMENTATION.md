@@ -20,7 +20,8 @@ Ordinary queries return lightweight summaries or explicitly requested detail. Hu
 | `server/handler.ts` | Workspace/role routing, mutation-origin checks, request limits and endpoint dispatch |
 | `server/team.ts` | Workspace resolution, actor-bound invitations and membership revocation |
 | `server/repository.ts`, `server/database.ts` | Scoped persistence, evidence guards, transactional batches and foreign-key enforcement |
-| `server/consultation-query.ts`, `server/practice-inbox.ts`, `server/followup-candidates.ts` | Bounded workspace queries and scope-bound keyset pagination |
+| `server/consultation-query.ts`, `server/practice-inbox.ts`, `server/followup-candidates.ts`, `server/job-query.ts` | Bounded workspace queries and scope-bound keyset pagination |
+| `lib/assessment-comparison.ts`, `lib/assessment-draft.ts`, `lib/run-telemetry.ts` | Revision comparisons, citation-preserving drafts and validated measurement reads |
 | `server/review-tasks.ts`, `server/learning.ts` | Versioned reviewer assignments, coaching decisions and pinned practice completion |
 | `server/insights.ts`, `server/operations.ts`, `server/storage.ts` | Workspace aggregates, owner operations and logical storage inspection |
 | `server/queue.ts`, `server/worker-auth.ts` | Durable analysis admission, atomic claims, lease recovery and cancellation |
@@ -79,6 +80,7 @@ Application endpoints require verified session admission and workspace authoriza
 | DELETE | `/api/team/members/:userId` | Owner revoke membership and cancel that member's active jobs |
 | DELETE | `/api/team/invitations/:id` | Owner revoke an invitation |
 | POST | `/api/jobs/:id/cancel` | Owner or requesting reviewer cancel active analysis |
+| GET | `/api/jobs` | Query scoped analysis history by status, type and consultation title |
 | GET | `/api/insights` | Read all-time workspace counts and rubric-separated aggregates |
 | GET | `/api/operations` | Owner inspect queue/failure/lease aggregates |
 | GET | `/api/storage` | Owner inspect scoped row counts and logical text bytes |
@@ -91,7 +93,7 @@ Application endpoints require verified session admission and workspace authoriza
 
 Personal workspaces support owner-managed reviewer/viewer memberships, actor-bound invitations and revocation. Selected workspace IDs are resolved against verified identity on every request. The pilot allowlist remains an additional admission boundary. Vercel preview Deployment Protection supplies an additional host boundary; production domain privacy must be verified separately before promotion.
 
-Hosted analysis requests now persist a queued intent and return 202. A separate privileged worker claims jobs, checks pinned inputs and requester permissions, and runs generation under a nonrenewable lease. Daily limits and duplicate-running checks constrain provider use. There is no automatic paid retry or token-cost ledger. Library and bootstrap-summary limits are intentional pilot constraints. Paginated consultation, reviewer, practice and eligible follow-up queries cover the full authorized workspace; this is not a hosted scale benchmark.
+Hosted analysis requests now persist a queued intent and return 202. A separate privileged worker claims jobs, checks pinned inputs and requester permissions, and runs generation under a nonrenewable lease. Daily limits and duplicate-running checks constrain provider use. There is no automatic paid retry or token-cost ledger. Library and bootstrap-summary limits are intentional pilot constraints. Paginated consultation, reviewer, practice, eligible follow-up and analysis-history queries cover the full authorized workspace; this is not a hosted scale benchmark.
 
 ## Observability
 
@@ -144,3 +146,7 @@ Successful AI persistence now commits the result, audit event and completed job 
 `server/storage.ts` returns owner-only counts and logical UTF-8 text bytes in one scoped aggregate statement. It excludes physical allocation, index overhead, replicas, backups and provider billing. `knowledge_documents.body_sha256` plus the workspace/hash unique index rejects exact trimmed-body duplicate imports; an atomic exact-body guard also covers older null-hash rows. This does not delete or rewrite existing sources.
 
 `server/followup-candidates.ts` searches eligible latest human assessments using workspace/assignment/query-bound keyset cursors. The UI no longer depends on the newest 200 bootstrap summaries to complete practice. Eligibility and approval are rechecked by the completion mutation. Query-specific indexes support these paths and existing review/queue reads; generated migrations remain the authoritative DDL. See [storage and query design](ARCHITECTURE.md#storage-and-query-design) for remaining scan/history costs and measurement boundaries.
+
+## Review comparison, history and recovery
+
+`server/job-query.ts` provides role-aware, scoped analysis history with bounded pages and filter-bound cursors. `lib/run-telemetry.ts` validates measurement reads for this endpoint and workspace bootstrap; malformed or unknown versions become unavailable metrics. Assessment comparison consumes existing scoped revisions, suppressing cross-rubric or unscored deltas. The editor captures the original draft baseline and preserves additional citations. Confirmed imports, rubric publications and assessment saves remain successful when a later refresh fails. See [Review comparison and operational recovery](REVIEW_OPERATIONS_ITERATION.md) for limits and verification. No new migration is required.

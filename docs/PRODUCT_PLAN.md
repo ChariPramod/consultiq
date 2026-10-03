@@ -14,6 +14,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | Rubric governance | Owner-authored anchors, explicit approval, immutable published versions |
 | Automated assessment | Implemented; provider credentials and approved rubric required |
 | Evidence validation | Implemented; invalid quote support cannot retain a numeric score |
+| Revision comparison and draft safety | Side-by-side review comparison; drafts pinned during polling; retained evidence and confirmed-save recovery |
 | RAG coaching | Implemented with approved-document keyword retrieval and checked citations |
 | LangSmith | Nested model and validation/save tracing implemented, optional, content excluded |
 | Coaching review and practice | Implemented in the private workspace with pinned human-reviewed comparisons |
@@ -21,6 +22,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | Storage visibility and document deduplication | Owner-only logical text inventory; exact approved-document duplicates rejected atomically |
 | Team access | Owner/reviewer/viewer membership, invitations and revocation implemented; pilot allowlist retained |
 | Background analysis | Persistent queue, separate worker, cancellation and lease fences implemented; worker deployment pending |
+| Analysis history | Full-workspace filtered pagination with validated measurements and role-aware cancellation |
 | Customer self-service and billing | Pending |
 | Audio, transcription, real patient data | Pending and outside current ingestion scope |
 | Offline evaluation infrastructure | Implemented; supplied references required, no validated domain benchmark |
@@ -66,3 +68,5 @@ The team/queue/evaluation/operations increment is detailed in [Product reliabili
 [The team workflow iteration](TEAM_WORKFLOW_ITERATION.md) adds reviewer ownership, UTC deadlines, versioned handoffs, the practice inbox, all-time aggregate insights and transcript search/copy. Apply migration 0005; live hosted verification remains credential-dependent.
 
 [Storage and query optimization](STORAGE_QUERY_OPTIMIZATION.md) adds migration 0006, duplicate-content prevention, an owner storage inventory and paginated follow-up discovery. The [architecture diagrams](ARCHITECTURE.md) describe the current implementation. Local synthetic query measurements do not establish hosted capacity or production latency.
+
+[Review and operational recovery](REVIEW_OPERATIONS_ITERATION.md) adds assessment comparisons, full analysis history, preservation of open drafts and extra evidence, confirmed-write recovery and malformed-measurement fallback. Persistent drafts across browser reloads and automated browser regressions remain follow-up engineering work.

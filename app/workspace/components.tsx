@@ -41,7 +41,7 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import {
   OUTCOME_LABELS,
   type CallRecord,
@@ -236,10 +236,12 @@ export function TranscriptDialog({
   open,
   onOpenChange,
   onCreated,
+  onInspect,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   onCreated: (call: CallRecord) => Promise<void>;
+  onInspect: () => void;
 }) {
   const [title, setTitle] = useState('');
   const [coordinator, setCoordinator] = useState('');
@@ -250,12 +252,39 @@ export function TranscriptDialog({
   const [transcript, setTranscript] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState<CallRecord | null>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const [checkedRecords, setCheckedRecords] = useState(false);
+  const locked = useRef(false);
+  const confirmed = useRef<CallRecord | null>(null);
+  const fileRead = useRef(0);
   const input = useRef<HTMLInputElement>(null);
+  function resetDraft() {
+    confirmed.current = null;
+    setSaved(null);
+    setUncertain(false);
+    setCheckedRecords(false);
+    setTitle('');
+    setTranscript('');
+    setError('');
+    fileRead.current++;
+  }
+  async function openSaved(call: CallRecord) {
+    try {
+      await onCreated(call);
+      onOpenChange(false);
+      resetDraft();
+    } catch {
+      setError(
+        'The consultation is saved, but the workspace could not refresh. Open the saved consultation again when your connection recovers; this will not import it twice.',
+      );
+    }
+  }
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
-        if (!busy) onOpenChange(v);
+        if (!locked.current) onOpenChange(v);
       }}
     >
       <DialogContent className="product-dialog">
@@ -265,160 +294,304 @@ export function TranscriptDialog({
             Add a synthetic or role-play transcript to your private workspace.
           </DialogDescription>
         </DialogHeader>
-        <form
-          className="product-form"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError('');
-            try {
-              const call = await api<CallRecord>('consultations', 'POST', {
-                title,
-                coordinator,
-                source,
-                recorded_at: recorded,
-                transcript,
-              });
-              await onCreated(call);
-              onOpenChange(false);
-              setTitle('');
-              setTranscript('');
-            } catch (e) {
-              setError(e instanceof Error ? e.message : 'Import failed.');
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <label>
-            Consultation title
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              maxLength={120}
-              placeholder="e.g. Follow-up consultation"
-            />
-          </label>
-          <div className="form-columns">
-            <label>
-              Coordinator
-              <input
-                value={coordinator}
-                onChange={(e) => setCoordinator(e.target.value)}
-                required
-                maxLength={100}
-                placeholder="Coordinator name"
-              />
-            </label>
-            <label>
-              Recorded on
-              <input
-                type="date"
-                value={recorded}
-                onChange={(e) => setRecorded(e.target.value)}
-                required
-              />
-            </label>
-          </div>
-          <label htmlFor="import-source">
-            Source
-            <NativeSelect
-              id="import-source"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-            >
-              <NativeSelectOption value="roleplay">
-                Role-play recording
-              </NativeSelectOption>
-              <NativeSelectOption value="synthetic">
-                Synthetic transcript
-              </NativeSelectOption>
-            </NativeSelect>
-          </label>
-          <label>
-            Transcript
-            <textarea
-              rows={7}
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              required
-              maxLength={100000}
-              placeholder={
-                'Coordinator: What would you like to discuss?\nPatient: I have a question about the next step.'
-              }
-              aria-describedby="transcript-format"
-            />
-          </label>
-          <div className="input-help-row">
-            <p id="transcript-format">
-              One speaker per line. Optional timestamps: [01:24].
+        {saved ? (
+          <div className="space-y-5">
+            <output className="block rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+              <strong className="block">Consultation saved</strong>
+              <span className="mt-1 block break-words">
+                {saved.title || title}
+              </span>
+              <span className="mt-2 block break-all text-xs">
+                Record ID: {saved.id}
+              </span>
+            </output>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Your import is complete. Opening the saved record only refreshes
+              the workspace. You can safely close this dialog.
             </p>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => input.current?.click()}
-            >
-              <Upload size={14} /> Load .txt
-            </button>
-            <input
-              ref={input}
-              type="file"
-              hidden
-              accept=".txt,text/plain"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  if (
-                    file.size > 100000 ||
-                    !file.name.toLowerCase().endsWith('.txt')
-                  )
-                    throw new Error('Choose a .txt file smaller than 100 KB.');
-                  setTranscript(await file.text());
+            <div className="form-actions flex-wrap">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => onOpenChange(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                onClick={resetDraft}
+              >
+                Import another consultation
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={busy}
+                onClick={async () => {
+                  if (locked.current || !confirmed.current) return;
+                  locked.current = true;
+                  setBusy(true);
                   setError('');
-                } catch (e) {
-                  setError(
-                    e instanceof Error ? e.message : 'File could not be read.',
+                  try {
+                    await openSaved(confirmed.current);
+                  } finally {
+                    locked.current = false;
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? (
+                  <Busy>Opening saved consultation</Busy>
+                ) : (
+                  'Open saved consultation'
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form
+            className="product-form"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (
+                locked.current ||
+                confirmed.current ||
+                (uncertain && !checkedRecords)
+              )
+                return;
+              locked.current = true;
+              fileRead.current++;
+              setBusy(true);
+              setError('');
+              setUncertain(false);
+              setCheckedRecords(false);
+              try {
+                const call = await api<CallRecord>('consultations', 'POST', {
+                  title,
+                  coordinator,
+                  source,
+                  recorded_at: recorded,
+                  transcript,
+                });
+                if (!call || typeof call.id !== 'string' || !call.id)
+                  throw new ApiError(
+                    'The saved record could not be confirmed. Check your consultation list before saving again.',
+                    200,
+                    'invalid_response',
                   );
-                } finally {
-                  if (input.current) input.current.value = '';
-                }
-              }}
-            />
-          </div>
-          <div className="product-notice">
-            <ShieldCheck size={17} />
-            <p>
-              The pilot accepts synthetic and role-play content. Audio
-              transcription and real patient recordings are not enabled.
-            </p>
-          </div>
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="form-actions">
-            <button
-              type="button"
-              className="secondary-button"
+                // Persistence is confirmed before any refresh or navigation.
+                confirmed.current = call;
+                setSaved(call);
+                await openSaved(call);
+              } catch (e) {
+                setUncertain(
+                  !(e instanceof ApiError) ||
+                    e.status === 0 ||
+                    e.status >= 500 ||
+                    e.code === 'invalid_response',
+                );
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : 'Import could not be confirmed.',
+                );
+              } finally {
+                locked.current = false;
+                setBusy(false);
+              }
+            }}
+          >
+            <fieldset
               disabled={busy}
-              onClick={() => onOpenChange(false)}
+              className="product-form min-w-0 border-0 p-0"
             >
-              Cancel
-            </button>
-            <button className="primary-button" disabled={busy}>
-              {busy ? (
-                <Busy>Saving consultation</Busy>
-              ) : (
-                <>
-                  Save consultation <ArrowRight size={16} />
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+              <label>
+                Consultation title
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                  maxLength={120}
+                  placeholder="e.g. Follow-up consultation"
+                />
+              </label>
+              <div className="form-columns">
+                <label>
+                  Coordinator
+                  <input
+                    value={coordinator}
+                    onChange={(e) => setCoordinator(e.target.value)}
+                    required
+                    maxLength={100}
+                    placeholder="Coordinator name"
+                  />
+                </label>
+                <label>
+                  Recorded on
+                  <input
+                    type="date"
+                    value={recorded}
+                    onChange={(e) => setRecorded(e.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+              <label htmlFor="import-source">
+                Source
+                <NativeSelect
+                  id="import-source"
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                >
+                  <NativeSelectOption value="roleplay">
+                    Role-play recording
+                  </NativeSelectOption>
+                  <NativeSelectOption value="synthetic">
+                    Synthetic transcript
+                  </NativeSelectOption>
+                </NativeSelect>
+              </label>
+              <label>
+                Transcript
+                <textarea
+                  rows={7}
+                  value={transcript}
+                  onChange={(e) => setTranscript(e.target.value)}
+                  required
+                  maxLength={100000}
+                  placeholder={
+                    'Coordinator: What would you like to discuss?\nPatient: I have a question about the next step.'
+                  }
+                  aria-describedby="transcript-format"
+                />
+              </label>
+              <div className="input-help-row">
+                <p id="transcript-format">
+                  One speaker per line. Optional timestamps: [01:24].
+                </p>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => input.current?.click()}
+                >
+                  <Upload size={14} /> Load .txt
+                </button>
+                <input
+                  ref={input}
+                  type="file"
+                  hidden
+                  accept=".txt,text/plain"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    const version = ++fileRead.current;
+                    if (!file || locked.current) return;
+                    try {
+                      if (
+                        file.size > 100000 ||
+                        !file.name.toLowerCase().endsWith('.txt')
+                      )
+                        throw new Error(
+                          'Choose a .txt file smaller than 100 KB.',
+                        );
+                      const text = await file.text();
+                      if (version !== fileRead.current || locked.current)
+                        return;
+                      setTranscript(text);
+                      setError('');
+                    } catch (e) {
+                      if (version === fileRead.current && !locked.current)
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : 'File could not be read.',
+                        );
+                    } finally {
+                      if (input.current) input.current.value = '';
+                    }
+                  }}
+                />
+              </div>
+              <div className="product-notice">
+                <ShieldCheck size={17} />
+                <p>
+                  The pilot accepts synthetic and role-play content. Audio
+                  transcription and real patient recordings are not enabled.
+                </p>
+              </div>
+            </fieldset>
+            {uncertain && (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <p>
+                  The import may already be saved. No automatic retry was made.
+                  Check your consultation list before submitting this draft
+                  again.
+                </p>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onInspect();
+                  }}
+                >
+                  Check consultation list
+                </button>
+                <p>
+                  Your draft stays available when you reopen Import transcript
+                  in this workspace.
+                </p>
+                <label
+                  className="checkbox-label"
+                  htmlFor="import-checked-records"
+                >
+                  <Checkbox
+                    id="import-checked-records"
+                    checked={checkedRecords}
+                    onCheckedChange={(value) =>
+                      setCheckedRecords(value === true)
+                    }
+                  />
+                  <span>I checked and this consultation was not saved.</span>
+                </label>
+              </div>
+            )}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={busy || (uncertain && !checkedRecords)}
+              >
+                {busy ? (
+                  <Busy>Saving consultation</Busy>
+                ) : (
+                  <>
+                    Save consultation <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

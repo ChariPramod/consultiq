@@ -407,3 +407,65 @@ test('follow-up candidate API enforces membership, scopes assignments and bounds
     [],
   );
 });
+
+test('analysis history API authorizes every page and excludes job payloads', async (t) => {
+  const { repo, other, call, privateCall, request } = await setup(t);
+  for (const [scope, id, callId, requestedBy] of [
+    [repo, 'own-analysis', call.id, 'user_reviewer'],
+    [other, 'private-analysis', privateCall.id, 'user_other'],
+  ]) {
+    await scope
+      .statement(
+        'INSERT INTO analysis_jobs(id,workspace_id,call_id,kind,status,created_at,requested_by,payload_json,request_key) VALUES(?,?,?,?,?,?,?,?,?)',
+        id,
+        scope.workspaceId,
+        callId,
+        'coaching',
+        'queued',
+        '2026-10-03T00:00:00.000Z',
+        requestedBy,
+        '{"question":"PRIVATE_JOB_PAYLOAD"}',
+        'PRIVATE_REQUEST_KEY',
+      )
+      .run();
+  }
+  assert.equal((await request(null, 'jobs')).status, 401);
+  assert.equal((await request('user_other', 'jobs')).status, 403);
+  assert.equal(
+    (await request('user_owner', 'jobs', { workspace: other.workspaceId }))
+      .status,
+    403,
+  );
+  for (const user of ['user_owner', 'user_reviewer', 'user_viewer']) {
+    const response = await request(
+      user,
+      'jobs?status=queued&kind=coaching&q=Workflow&limit=1',
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const result = await response.json();
+    assert.equal(result.jobs.length, 1);
+    assert.equal(result.jobs[0].id, 'own-analysis');
+    assert.equal(result.jobs[0].can_cancel, user !== 'user_viewer');
+    assert.equal(result.has_more, false);
+    assert.doesNotMatch(
+      JSON.stringify(result),
+      /PRIVATE_JOB_PAYLOAD|PRIVATE_REQUEST_KEY|Other workspace secret|private-analysis|requested_by|payload_json|token/,
+    );
+  }
+  assert.equal((await request('user_owner', 'jobs?limit=51')).status, 422);
+  assert.equal((await request('user_owner', 'jobs?status=bogus')).status, 422);
+  assert.equal(
+    (await request('user_owner', 'jobs?cursor=not-a-cursor')).status,
+    422,
+  );
+  await repo
+    .statement(
+      "UPDATE analysis_jobs SET status='completed' WHERE id=? AND workspace_id=?",
+      'own-analysis',
+      repo.workspaceId,
+    )
+    .run();
+  const refreshed = await (await request('user_owner', 'jobs')).json();
+  assert.equal(refreshed.jobs[0].can_cancel, false);
+});

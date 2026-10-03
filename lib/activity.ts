@@ -1,30 +1,3 @@
-import type { WorkspaceData } from './product.ts';
-export type ActivityFilter =
-  | 'all'
-  | 'queued'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
-export function filterActivity(
-  data: Pick<WorkspaceData, 'jobs' | 'calls'>,
-  filter: ActivityFilter,
-  query: string,
-) {
-  const term = query.trim().toLowerCase();
-  const calls = new Map(data.calls.map((call) => [call.id, call]));
-  return data.jobs.filter(
-    (job) =>
-      (filter === 'all' || job.status === filter) &&
-      [
-        job.id,
-        job.kind,
-        job.error_code ?? '',
-        calls.get(job.call_id)?.title ?? '',
-        calls.get(job.call_id)?.coordinator ?? '',
-      ].some((value) => value.toLowerCase().includes(term)),
-  );
-}
 export function recoveryMessage(code: string | null) {
   if (code === 'interrupted')
     return 'This request was interrupted. Open the consultation to check saved results before starting another run.';
@@ -35,4 +8,44 @@ export function recoveryMessage(code: string | null) {
   if (code === 'unsupported_coaching' || code === 'provider_output_invalid')
     return 'The answer could not be validated. Review the transcript manually or consult approved library material.';
   return 'Open the consultation and check saved results. Manual review remains available; another AI request may incur usage.';
+}
+
+/** A successful HTTP response can describe a no-op when the worker finished first. */
+export function cancellationResult(response: unknown, expectedJobId: string) {
+  if (response && typeof response === 'object' && !Array.isArray(response)) {
+    const job = (response as Record<string, unknown>).job;
+    if (job === null)
+      return {
+        uncertain: false,
+        message:
+          'This run is no longer available. Refresh activity to reconcile removed records.',
+      };
+    if (job && typeof job === 'object' && !Array.isArray(job)) {
+      const row = job as Record<string, unknown>;
+      if (row.id === expectedJobId) {
+        if (row.status === 'cancelled')
+          return {
+            uncertain: false,
+            message: 'Cancellation saved. Refreshing the run status.',
+          };
+        if (row.status === 'completed')
+          return {
+            uncertain: false,
+            message:
+              'The run had already completed. Open the consultation to inspect its saved result.',
+          };
+        if (row.status === 'failed')
+          return {
+            uncertain: false,
+            message:
+              'The run had already failed. Refresh activity to inspect the failure.',
+          };
+      }
+    }
+  }
+  return {
+    uncertain: true,
+    message:
+      'Cancellation could not be confirmed from the response. Refresh activity to check the current status before trying again.',
+  };
 }

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Operations } from './operations';
 import { StoragePanel } from './storage';
 import {
@@ -30,7 +30,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import {
   DIMENSIONS,
   type KnowledgeDocument,
@@ -69,6 +69,25 @@ export function RubricEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [published, setPublished] = useState<Rubric | null>(null);
+  const [uncertain, setUncertain] = useState(false);
+  const [checkedVersions, setCheckedVersions] = useState(false);
+  const locked = useRef(false);
+  const confirmed = useRef<Rubric | null>(null);
+  async function refreshPublished() {
+    try {
+      await reload();
+      setError('');
+    } catch (e) {
+      setError(
+        confirmed.current
+          ? 'Your rubric version was published, but the workspace could not refresh. Refresh the workspace below to check the current standard; no new version will be created.'
+          : e instanceof Error
+            ? e.message
+            : 'Could not refresh published rubrics.',
+      );
+    }
+  }
   const edit = (
     index: number,
     key: 'one' | 'three' | 'five',
@@ -111,21 +130,51 @@ export function RubricEditor({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+          if (
+            locked.current ||
+            confirmed.current ||
+            (uncertain && !checkedVersions)
+          )
+            return;
+          locked.current = true;
           setError('');
           setSuccess('');
+          setUncertain(false);
+          setCheckedVersions(false);
           setBusy(true);
           try {
-            await api('rubrics', 'POST', { title, definitions, approved });
-            await reload();
+            const version = await api<Rubric>('rubrics', 'POST', {
+              title,
+              definitions,
+              approved,
+            });
+            if (!version || typeof version.id !== 'string' || !version.id)
+              throw new ApiError(
+                'The published version could not be confirmed. Refresh the workspace and check before publishing again.',
+                200,
+                'invalid_response',
+              );
+            confirmed.current = version;
+            setPublished(version);
             setApproved(false);
             setSuccess(
-              'Rubric published. New assessments will use this version.',
+              'Rubric version published. Previous assessments keep their original rubric.',
             );
+            await refreshPublished();
           } catch (e) {
+            setUncertain(
+              !(e instanceof ApiError) ||
+                e.status === 0 ||
+                e.status >= 500 ||
+                e.code === 'invalid_response',
+            );
             setError(
-              e instanceof Error ? e.message : 'Could not publish the rubric.',
+              e instanceof Error
+                ? e.message
+                : 'The published version could not be confirmed.',
             );
           } finally {
+            locked.current = false;
             setBusy(false);
           }
         }}
@@ -134,6 +183,7 @@ export function RubricEditor({
           <label>
             Rubric name
             <input
+              disabled={busy || !!published}
               value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
@@ -190,6 +240,7 @@ export function RubricEditor({
                     <label key={key}>
                       {label}
                       <textarea
+                        disabled={busy || !!published}
                         rows={5}
                         maxLength={2000}
                         value={
@@ -216,6 +267,7 @@ export function RubricEditor({
             <label className="checkbox-label" htmlFor="approve-rubric">
               <Checkbox
                 id="approve-rubric"
+                disabled={busy || !!published}
                 checked={approved}
                 onCheckedChange={(value) => setApproved(value === true)}
               />
@@ -231,10 +283,16 @@ export function RubricEditor({
           </div>
           <button
             className="primary-button"
-            disabled={busy || !approved || completed !== 8}
+            disabled={
+              busy ||
+              !!published ||
+              !approved ||
+              completed !== 8 ||
+              (uncertain && !checkedVersions)
+            }
           >
             {busy ? (
-              <Busy>Publishing</Busy>
+              <Busy>{published ? 'Refreshing workspace' : 'Publishing'}</Busy>
             ) : (
               <>
                 Publish rubric <ArrowRight size={16} />
@@ -242,6 +300,89 @@ export function RubricEditor({
             )}
           </button>
         </div>
+        {published && (
+          <div className="mt-5 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+            <p>
+              <strong>Published version: {published.title || title}</strong>
+            </p>
+            <p className="break-all text-xs">Version ID: {published.id}</p>
+            <p>
+              This version is saved. Refreshing only reloads workspace
+              information.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={async () => {
+                  if (locked.current) return;
+                  locked.current = true;
+                  setBusy(true);
+                  try {
+                    await refreshPublished();
+                  } finally {
+                    locked.current = false;
+                    setBusy(false);
+                  }
+                }}
+              >
+                Refresh published rubric
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                onClick={() => {
+                  if (locked.current) return;
+                  confirmed.current = null;
+                  setPublished(null);
+                  setApproved(false);
+                  setSuccess('');
+                  setError('');
+                }}
+              >
+                Edit another version
+              </button>
+            </div>
+          </div>
+        )}
+        {uncertain && (
+          <div className="mt-5 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p>
+              The rubric may already be published. No automatic retry was made.
+              Refresh and check the current standard before publishing this
+              draft again.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy}
+              onClick={async () => {
+                if (locked.current) return;
+                locked.current = true;
+                setBusy(true);
+                try {
+                  await refreshPublished();
+                } finally {
+                  locked.current = false;
+                  setBusy(false);
+                }
+              }}
+            >
+              Refresh workspace
+            </button>
+            <label className="checkbox-label" htmlFor="rubric-checked-versions">
+              <Checkbox
+                id="rubric-checked-versions"
+                checked={checkedVersions}
+                disabled={busy}
+                onCheckedChange={(value) => setCheckedVersions(value === true)}
+              />
+              <span>I checked and this rubric version was not published.</span>
+            </label>
+          </div>
+        )}
         {error && (
           <p className="form-error" role="alert">
             {error}

@@ -509,6 +509,11 @@ export default function Workspace() {
               <TranscriptDialog
                 open={importOpen}
                 onOpenChange={setImportOpen}
+                onInspect={() => {
+                  // An uncertain import may have committed after this queue loaded.
+                  setQueueVersion((version) => version + 1);
+                  navigate('consultations');
+                }}
                 onCreated={async (call) => {
                   await reload();
                   navigate('consultations', call.id);

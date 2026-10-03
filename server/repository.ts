@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { parseRunTelemetry } from '../lib/run-telemetry.ts';
 import { retrievalTokens, rankRetrievedChunks } from '../lib/retrieval.ts';
 import type { AnalysisTelemetry } from './telemetry.ts';
 import {
@@ -229,9 +230,7 @@ export class Repository {
       documents: documents.results,
       jobs: jobs.results.map(({ telemetry_json, ...job }) => ({
         ...job,
-        telemetry: telemetry_json
-          ? (JSON.parse(telemetry_json) as AnalysisTelemetry)
-          : null,
+        telemetry: parseRunTelemetry(telemetry_json),
       })),
     };
   }

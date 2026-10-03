@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { api } from '../lib/api.ts';
-import { filterActivity, recoveryMessage } from '../lib/activity.ts';
+import { cancellationResult, recoveryMessage } from '../lib/activity.ts';
 test('lost writes are not retried and advise checking saved results', async () => {
   let calls = 0;
   await assert.rejects(
@@ -49,37 +49,13 @@ test('API preserves authentication errors and returns valid data', async () => {
     { jobs: [] },
   );
 });
-test('activity filtering searches only supplied loaded workspace records', () => {
-  const data = {
-    calls: [
-      { id: 'c', title: 'Follow-up review', coordinator: 'Coordinator A' },
-    ],
-    jobs: [
-      {
-        id: 'r1',
-        call_id: 'c',
-        kind: 'scoring',
-        status: 'failed',
-        error_code: 'interrupted',
-      },
-      {
-        id: 'r2',
-        call_id: 'missing',
-        kind: 'coaching',
-        status: 'completed',
-        error_code: null,
-      },
-    ],
-  };
-  assert.deepEqual(
-    filterActivity(data, 'failed', 'FOLLOW-UP').map((x) => x.id),
-    ['r1'],
-  );
-  assert.equal(filterActivity(data, 'completed', 'FOLLOW-UP').length, 0);
-  assert.equal(filterActivity(data, 'all', 'interrupted').length, 1);
-  assert.equal(filterActivity(data, 'all', 'r2').length, 1);
-  assert.equal(filterActivity({ calls: [], jobs: [] }, 'all', '').length, 0);
+test('failed analysis recovery explains checking saved results without promising retries', () => {
   assert.match(recoveryMessage('interrupted'), /check saved results/);
+  assert.match(recoveryMessage('review_conflict'), /newer review/i);
+  assert.match(
+    recoveryMessage('unsupported_coaching'),
+    /could not be validated/,
+  );
   assert.match(recoveryMessage('unknown'), /Manual review/);
 });
 
@@ -134,36 +110,6 @@ test('unavailable browser storage falls back to the server-selected personal wor
   }
 });
 
-test('queued and cancelled analysis runs can be inspected independently', () => {
-  const data = {
-    calls: [],
-    jobs: [
-      {
-        id: 'q',
-        call_id: 'c',
-        kind: 'scoring',
-        status: 'queued',
-        error_code: null,
-      },
-      {
-        id: 'x',
-        call_id: 'c',
-        kind: 'scoring',
-        status: 'cancelled',
-        error_code: null,
-      },
-    ],
-  };
-  assert.deepEqual(
-    filterActivity(data, 'queued', '').map((job) => job.id),
-    ['q'],
-  );
-  assert.deepEqual(
-    filterActivity(data, 'cancelled', '').map((job) => job.id),
-    ['x'],
-  );
-});
-
 test('queue CSV neutralizes formulas hidden behind whitespace or BOM', async () => {
   const { csv } = await import('../lib/product.ts');
   for (const title of ['  =1+1', '\uFEFF@SUM(1)', '\n=1', '\ttext', '-1+2']) {
@@ -178,5 +124,46 @@ test('queue CSV neutralizes formulas hidden behind whitespace or BOM', async () 
       },
     ]);
     assert.ok(result.split('\r\n')[1].startsWith('"\''), title);
+  }
+});
+
+test('cancellation feedback reports terminal races and deleted jobs without claiming cancellation', () => {
+  const cancelled = cancellationResult(
+    { job: { id: 'run', status: 'cancelled' } },
+    'run',
+  );
+  assert.equal(cancelled.uncertain, false);
+  assert.match(cancelled.message, /Cancellation saved/);
+  for (const status of ['completed', 'failed']) {
+    const outcome = cancellationResult({ job: { id: 'run', status } }, 'run');
+    assert.equal(outcome.uncertain, false);
+    assert.match(outcome.message, new RegExp(`already ${status}`));
+    assert.doesNotMatch(outcome.message, /Cancellation saved|Run cancelled/);
+  }
+  const removed = cancellationResult({ job: null }, 'run');
+  assert.equal(removed.uncertain, false);
+  assert.match(removed.message, /no longer available/);
+  assert.doesNotMatch(removed.message, /Cancellation saved/);
+});
+
+test('unverifiable cancellation bodies pause repeat actions and never expose raw response content', () => {
+  for (const response of [
+    null,
+    {},
+    { cancelled: true },
+    { job: [] },
+    { job: { id: 'other-run', status: 'cancelled' } },
+    { job: { id: 'run', status: 'queued' } },
+    { job: { id: 'run', status: 'running' } },
+    { job: { id: 'run', status: 'PRIVATE_PROVIDER_MESSAGE' } },
+  ]) {
+    const outcome = cancellationResult(response, 'run');
+    assert.equal(outcome.uncertain, true);
+    assert.match(outcome.message, /could not be confirmed/);
+    assert.match(outcome.message, /Refresh activity/);
+    assert.doesNotMatch(
+      outcome.message,
+      /PRIVATE_PROVIDER_MESSAGE|other-run|Cancellation saved/,
+    );
   }
 });

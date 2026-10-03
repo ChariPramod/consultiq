@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -32,10 +32,16 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { api } from '@/lib/api';
+import {
+  assessmentDraftEntryReady,
+  buildAssessmentDimensions,
+  createAssessmentDraftEntry,
+} from '@/lib/assessment-draft';
 import { LearningWorkspace } from './learning';
 import { ReviewExport } from './review-export';
 import { TranscriptReader } from './transcript-reader';
 import { ReviewTaskPanel } from './review-task';
+import { AssessmentComparison } from './assessment-comparison';
 import {
   DIMENSIONS,
   OUTCOME_LABELS,
@@ -74,19 +80,35 @@ export default function Review({
   const [tab, setTab] = useState<string>(initialTab);
   const [highlight, setHighlight] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [editSession, setEditSession] = useState<{
+    call: CallRecord;
+    rubric: NonNullable<WorkspaceData['rubric']>;
+  } | null>(null);
+  const [refreshPending, setRefreshPending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historical, setHistorical] = useState<SavedAssessment | null>(null);
+  const detailRequest = useRef(0);
+  const detailLifecycle = useRef({ callId, active: false });
   const viewer = data.access.role === 'viewer';
   const jobRevision = data.jobs
     .filter((job) => job.call_id === callId)
     .map((job) => `${job.id}:${job.status}`)
     .join(',');
   const reload = useCallback(async () => {
+    const request = ++detailRequest.current;
+    const lifecycle = detailLifecycle.current;
+    const isCurrent = () =>
+      lifecycle.active &&
+      lifecycle === detailLifecycle.current &&
+      lifecycle.callId === callId &&
+      request === detailRequest.current;
     try {
       const result = await api<Detail>(`consultations/${callId}`);
+      if (!isCurrent()) return;
       setDetail(result);
       setError('');
     } catch (e) {
+      if (!isCurrent()) return;
       setError(
         e instanceof Error ? e.message : 'Could not open the consultation.',
       );
@@ -94,24 +116,23 @@ export default function Review({
     }
   }, [callId]);
   useEffect(() => {
+    const lifecycle = { callId, active: true };
+    detailLifecycle.current = lifecycle;
+    return () => {
+      lifecycle.active = false;
+    };
+  }, [callId]);
+  useEffect(() => {
+    // Initial reads, polling and explicit reloads share one sequence. A slower
+    // earlier response cannot replace the result of a post-save read.
     let active = true;
-    void api<Detail>(`consultations/${callId}`).then(
-      (result) => {
-        if (active) setDetail(result);
-      },
-      (error: unknown) => {
-        if (active)
-          setError(
-            error instanceof Error
-              ? error.message
-              : 'Could not open the consultation.',
-          );
-      },
-    );
+    void Promise.resolve()
+      .then(() => (active ? reload() : undefined))
+      .catch(() => {});
     return () => {
       active = false;
     };
-  }, [callId, jobRevision]);
+  }, [reload, jobRevision]);
   useEffect(() => {
     if (tab === 'transcript' && highlight !== null) {
       const timer = setTimeout(
@@ -124,7 +145,7 @@ export default function Review({
       return () => clearTimeout(timer);
     }
   }, [tab, highlight]);
-  if (!detail)
+  if (!detail || detail.call.id !== callId)
     return (
       <section className="product-panel">
         {error ? (
@@ -149,6 +170,20 @@ export default function Review({
     );
   const { call } = detail;
   const assessment = historical ?? call.latest;
+  const startHumanAssessment = () => {
+    if (!data.rubric) return onConfigure();
+    // Capture the saved baseline once. Polling must not rebase an open draft.
+    setEditSession({ call, rubric: data.rubric });
+    setEditOpen(true);
+  };
+  const refreshSavedAssessment = async () => {
+    const lifecycle = detailLifecycle.current;
+    const results = await Promise.allSettled([reload(), onChanged()]);
+    if (!lifecycle.active || lifecycle !== detailLifecycle.current) return;
+    const failed = results.some((result) => result.status === 'rejected');
+    setRefreshPending(failed);
+    if (!failed) setError('');
+  };
   return (
     <>
       {notice && (
@@ -168,8 +203,8 @@ export default function Review({
           <Trash2 size={15} /> Delete consultation
         </button>
       </div>
-      <ReviewTaskPanel key={callId} callId={callId} access={data.access} />
-      <ReviewExport key={callId} callId={callId} />
+      <ReviewTaskPanel key={`task:${callId}`} callId={callId} access={data.access} />
+      <ReviewExport key={`export:${callId}`} callId={callId} />
       <section className="product-panel consultation-header">
         <div className="consultation-title-row">
           <div>
@@ -227,7 +262,7 @@ export default function Review({
             <button
               className="secondary-button"
               disabled={busy || viewer || !data.rubric}
-              onClick={() => setEditOpen(true)}
+              onClick={startHumanAssessment}
             >
               <Pencil size={15} /> Human assessment
             </button>
@@ -291,9 +326,19 @@ export default function Review({
           )
         )}
       </section>
-      {error && (
+      {(error || refreshPending) && (
         <div className="product-error" role="alert">
-          {error}
+          {refreshPending
+            ? 'Assessment saved, but the latest workspace data could not be refreshed. Retry loading the saved result.'
+            : error}
+          {refreshPending && (
+            <button
+              className="text-button"
+              onClick={() => void refreshSavedAssessment()}
+            >
+              Refresh saved assessment
+            </button>
+          )}
         </div>
       )}
       <Tabs
@@ -419,9 +464,7 @@ export default function Review({
                   <button
                     className="primary-button"
                     disabled={viewer}
-                    onClick={() =>
-                      data.rubric ? setEditOpen(true) : onConfigure()
-                    }
+                    onClick={startHumanAssessment}
                   >
                     {data.rubric ? 'Start human assessment' : 'Define rubric'}
                     <ArrowRight size={16} />
@@ -440,9 +483,7 @@ export default function Review({
               await reload();
               await onChanged();
             }}
-            onHumanReview={() =>
-              data.rubric ? setEditOpen(true) : onConfigure()
-            }
+            onHumanReview={startHumanAssessment}
           />
         </TabsContent>
         <TabsContent value="coaching">
@@ -457,6 +498,14 @@ export default function Review({
           />
         </TabsContent>
         <TabsContent value="history">
+          <AssessmentComparison
+            key={call.id}
+            assessments={detail.assessments}
+            onSource={(turnIndex) => {
+              setHighlight(turnIndex);
+              setTab('transcript');
+            }}
+          />
           <section className="product-panel">
             {detail.assessments.length ? (
               <div className="assessment-history">
@@ -505,18 +554,18 @@ export default function Review({
           </section>
         </TabsContent>
       </Tabs>
-      {data.rubric && (
+      {editOpen && editSession && (
         <AssessmentDialog
-          key={`${call.id}-${call.latest?.id ?? 'new'}`}
           open={editOpen}
           onOpenChange={setEditOpen}
-          call={call}
-          rubric={data.rubric}
+          call={editSession.call}
+          rubric={editSession.rubric}
+          latestAssessmentId={call.latest?.id ?? null}
           onSaved={async () => {
-            await reload();
-            await onChanged();
             setHistorical(null);
             setTab('assessment');
+            setNotice('Human assessment saved as a new revision.');
+            await refreshSavedAssessment();
           }}
         />
       )}
@@ -541,12 +590,14 @@ function AssessmentDialog({
   onOpenChange,
   call,
   rubric: initialRubric,
+  latestAssessmentId,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   call: CallRecord;
   rubric: NonNullable<WorkspaceData['rubric']>;
+  latestAssessmentId: string | null;
   onSaved: () => Promise<void>;
 }) {
   const [rubric, setRubric] = useState(initialRubric);
@@ -583,25 +634,15 @@ function AssessmentDialog({
         call.latest?.rubric_id === rubric.id
           ? call.latest.content.dimensions[dimension]
           : undefined;
-      return {
-        dimension,
-        score: existing?.score ?? null,
-        rationale: existing?.rationale ?? '',
-        coaching_note: existing?.coaching_note ?? '',
-        turn_index: existing?.evidence[0]?.turn_index ?? 0,
-        span: existing?.evidence[0]?.span ?? '',
-      };
+      return createAssessmentDraftEntry(dimension, existing);
     }),
   );
   const [busy, setBusy] = useState(false);
+  const locked = useRef(false);
   const [error, setError] = useState('');
   const entry = entries[active];
   const anchor = rubric.definitions[active];
-  const complete = entries.filter(
-    (e) =>
-      e.rationale.trim().length >= 3 &&
-      (e.score === null || e.span.trim().length >= 8),
-  ).length;
+  const complete = entries.filter(assessmentDraftEntryReady).length;
   const update = (value: Partial<typeof entry>) =>
     setEntries((old) =>
       old.map((e, i) => (i === active ? { ...e, ...value } : e)),
@@ -610,7 +651,7 @@ function AssessmentDialog({
     <Dialog
       open={open}
       onOpenChange={(value) => {
-        if (!busy) onOpenChange(value);
+        if (!locked.current) onOpenChange(value);
       }}
     >
       <DialogContent className="assessment-dialog">
@@ -620,256 +661,316 @@ function AssessmentDialog({
             {rubric.title} · {complete} of 8 dimensions ready to save
           </DialogDescription>
         </DialogHeader>
-        <div className="rounded-lg border p-3 space-y-2">
-          <label className="text-sm">
-            Published rubric version
-            <NativeSelect
-              disabled={busy}
-              value={rubricId}
-              onChange={(e) => setRubricId(e.target.value)}
-            >
-              <NativeSelectOption value={rubric.id}>
-                {rubric.title} · current draft
-              </NativeSelectOption>
-              {versions
-                .filter((v) => v.id !== rubric.id)
-                .map((v) => (
-                  <NativeSelectOption key={v.id} value={v.id}>
-                    {v.title} · {new Date(v.created_at).toLocaleString()} ·{' '}
-                    {v.id.slice(0, 8)}
-                  </NativeSelectOption>
-                ))}
-            </NativeSelect>
-          </label>
-          <label className="block text-sm">
-            Or enter a published rubric ID
-            <input
-              className="mt-1 block w-full rounded border p-2"
-              value={rubricId}
-              disabled={busy}
-              onChange={(e) => setRubricId(e.target.value)}
-              maxLength={100}
-            />
-          </label>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy || rubricId === rubric.id || !rubricId.trim()}
-            onClick={async () => {
-              setBusy(true);
-              setError('');
-              try {
-                const chosen = await api<NonNullable<WorkspaceData['rubric']>>(
-                  `rubrics/${encodeURIComponent(rubricId)}`,
-                );
-                setRubric(chosen);
-                setActive(0);
-                setEntries(
-                  DIMENSIONS.map((_, dimension) => ({
-                    dimension,
-                    score: null,
-                    rationale: '',
-                    coaching_note: '',
-                    turn_index: 0,
-                    span: '',
-                  })),
-                );
-              } catch (e) {
-                setError(
-                  e instanceof Error
-                    ? e.message
-                    : 'Could not load rubric. Your draft is unchanged.',
-                );
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Start empty draft with selected rubric
-          </button>
-          <p className="text-sm text-slate-500">
-            Loading a different version clears this assessment draft. Use the
-            assignment’s baseline rubric for a comparable follow-up. Version
-            list shows the latest 100 published rubrics.
-          </p>
-          {versionError && (
-            <p role="alert" className="text-sm text-amber-800">
-              {versionError}
-            </p>
-          )}
-        </div>
-        <div className="assessment-editor-layout">
-          <nav aria-label="Rubric dimensions">
-            {DIMENSIONS.map((d, i) => (
-              <button
-                key={d}
-                aria-current={i === active ? 'step' : undefined}
-                className={i === active ? 'active' : ''}
-                onClick={() => setActive(i)}
-              >
-                <span>0{i + 1}</span>
-                {d}
-                {entries[i].rationale.trim().length >= 3 &&
-                  (entries[i].score === null ||
-                    entries[i].span.trim().length >= 8) && <Check size={14} />}
-              </button>
-            ))}
-          </nav>
-          <div className="assessment-editor-main">
-            <h3>{DIMENSIONS[active]}</h3>
-            <div className="anchor-reference">
-              {[
-                { score: 1, text: anchor.one },
-                { score: 3, text: anchor.three },
-                { score: 5, text: anchor.five },
-              ].map((a) => (
-                <div key={a.score}>
-                  <strong>{a.score}</strong>
-                  <p>{a.text}</p>
-                </div>
-              ))}
-            </div>
-            <div className="product-form">
-              <label>
-                Assessment score
-                <NativeSelect
-                  value={entry.score === null ? '' : entry.score}
-                  onChange={(e) =>
-                    update({
-                      score: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                >
-                  <NativeSelectOption value="">
-                    Unsupported / not observable
-                  </NativeSelectOption>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <NativeSelectOption key={n} value={n}>
-                      {n} out of 5
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </label>
-              <label>
-                Rationale
-                <textarea
-                  rows={3}
-                  maxLength={2000}
-                  value={entry.rationale}
-                  onChange={(e) => update({ rationale: e.target.value })}
-                  placeholder="Explain the assessment, or why this behavior is not observable."
-                />
-              </label>
-              <label>
-                Supporting transcript turn
-                <NativeSelect
-                  value={entry.turn_index}
-                  onChange={(e) => {
-                    const index = Number(e.target.value);
-                    update({
-                      turn_index: index,
-                      span: call.turns[index].text.slice(0, 6000),
-                    });
-                  }}
-                >
-                  {call.turns.map((turn, i) => (
-                    <NativeSelectOption key={i} value={i}>
-                      Turn {i + 1} · {turn.role} · {turn.text.slice(0, 70)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </label>
-              <div className="selected-turn-text">
-                {call.turns[entry.turn_index].text}
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() =>
-                    update({
-                      span: call.turns[entry.turn_index].text.slice(0, 6000),
-                    })
-                  }
-                >
-                  Use this excerpt <ArrowRight size={13} />
-                </button>
-              </div>
-              <label>
-                Verbatim evidence
-                <textarea
-                  rows={2}
-                  maxLength={6000}
-                  value={entry.span}
-                  onChange={(e) => update({ span: e.target.value })}
-                  placeholder="Copy the relevant words from the selected turn."
-                />
-              </label>
-              <label>
-                Coaching note <span className="optional-label">Optional</span>
-                <textarea
-                  rows={2}
-                  maxLength={2000}
-                  value={entry.coaching_note}
-                  onChange={(e) => update({ coaching_note: e.target.value })}
-                  placeholder="A specific action to practice next."
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
+        {latestAssessmentId !== (call.latest?.id ?? null) && (
+          <output className="block rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            A newer assessment was saved while this draft was open. Your draft
+            is preserved against its original revision. Saving will be rejected
+            if that revision is no longer latest; copy any notes you need before
+            closing and starting from the latest assessment.
+          </output>
         )}
-        <div className="assessment-editor-footer">
-          <span>Saving preserves earlier assessments.</span>
-          <div>
-            {active < 7 && (
-              <button
-                className="secondary-button"
+        <fieldset
+          disabled={busy}
+          aria-busy={busy}
+          className="min-w-0 space-y-4"
+        >
+          <legend className="sr-only">Assessment draft</legend>
+          <div className="rounded-lg border p-3 space-y-2">
+            <label className="text-sm">
+              Published rubric version
+              <NativeSelect
                 disabled={busy}
-                onClick={() => setActive(active + 1)}
+                value={rubricId}
+                onChange={(e) => setRubricId(e.target.value)}
               >
-                Next dimension <ChevronRight size={15} />
-              </button>
-            )}
+                <NativeSelectOption value={rubric.id}>
+                  {rubric.title} · current draft
+                </NativeSelectOption>
+                {versions
+                  .filter((v) => v.id !== rubric.id)
+                  .map((v) => (
+                    <NativeSelectOption key={v.id} value={v.id}>
+                      {v.title} · {new Date(v.created_at).toLocaleString()} ·{' '}
+                      {v.id.slice(0, 8)}
+                    </NativeSelectOption>
+                  ))}
+              </NativeSelect>
+            </label>
+            <label className="block text-sm">
+              Or enter a published rubric ID
+              <input
+                className="mt-1 block w-full rounded border p-2"
+                value={rubricId}
+                disabled={busy}
+                onChange={(e) => setRubricId(e.target.value)}
+                maxLength={100}
+              />
+            </label>
             <button
-              className="primary-button"
-              disabled={busy || complete !== 8}
+              type="button"
+              className="secondary-button"
+              disabled={busy || rubricId === rubric.id || !rubricId.trim()}
               onClick={async () => {
+                if (locked.current) return;
+                locked.current = true;
                 setBusy(true);
                 setError('');
                 try {
-                  await api(`consultations/${call.id}/reviews`, 'POST', {
-                    rubric_id: rubric.id,
-                    base_assessment_id: call.latest?.id ?? '',
-                    dimensions: entries.map((e) => ({
-                      dimension: e.dimension,
-                      score: e.score,
-                      rationale: e.rationale,
-                      coaching_note: e.coaching_note,
-                      evidence: e.span.trim()
-                        ? [{ turn_index: e.turn_index, span: e.span }]
-                        : [],
-                    })),
-                  });
-                  await onSaved();
-                  onOpenChange(false);
+                  const chosen = await api<
+                    NonNullable<WorkspaceData['rubric']>
+                  >(`rubrics/${encodeURIComponent(rubricId)}`);
+                  setRubric(chosen);
+                  setActive(0);
+                  setEntries(
+                    DIMENSIONS.map((_, dimension) =>
+                      createAssessmentDraftEntry(dimension),
+                    ),
+                  );
                 } catch (e) {
                   setError(
                     e instanceof Error
                       ? e.message
-                      : 'Could not save the assessment.',
+                      : 'Could not load rubric. Your draft is unchanged.',
                   );
                 } finally {
+                  locked.current = false;
                   setBusy(false);
                 }
               }}
             >
-              {busy ? <Busy>Saving</Busy> : 'Save assessment'}
+              Start empty draft with selected rubric
             </button>
+            <p className="text-sm text-slate-500">
+              Loading a different version clears this assessment draft. Use the
+              assignment’s baseline rubric for a comparable follow-up. Version
+              list shows the latest 100 published rubrics.
+            </p>
+            {versionError && (
+              <p role="alert" className="text-sm text-amber-800">
+                {versionError}
+              </p>
+            )}
           </div>
-        </div>
+          <div className="assessment-editor-layout">
+            <nav aria-label="Rubric dimensions">
+              {DIMENSIONS.map((d, i) => (
+                <button
+                  key={d}
+                  aria-current={i === active ? 'step' : undefined}
+                  className={i === active ? 'active' : ''}
+                  onClick={() => setActive(i)}
+                >
+                  <span>0{i + 1}</span>
+                  {d}
+                  {assessmentDraftEntryReady(entries[i]) && <Check size={14} />}
+                </button>
+              ))}
+            </nav>
+            <div className="assessment-editor-main">
+              <h3>{DIMENSIONS[active]}</h3>
+              <div className="anchor-reference">
+                {[
+                  { score: 1, text: anchor.one },
+                  { score: 3, text: anchor.three },
+                  { score: 5, text: anchor.five },
+                ].map((a) => (
+                  <div key={a.score}>
+                    <strong>{a.score}</strong>
+                    <p>{a.text}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="product-form">
+                <label>
+                  Assessment score
+                  <NativeSelect
+                    value={entry.score === null ? '' : entry.score}
+                    onChange={(e) =>
+                      update({
+                        score: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                  >
+                    <NativeSelectOption value="">
+                      Unsupported / not observable
+                    </NativeSelectOption>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <NativeSelectOption key={n} value={n}>
+                        {n} out of 5
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </label>
+                <label>
+                  Rationale
+                  <textarea
+                    aria-label="Rationale"
+                    rows={3}
+                    maxLength={2000}
+                    value={entry.rationale}
+                    onChange={(e) => update({ rationale: e.target.value })}
+                    placeholder="Explain the assessment, or why this behavior is not observable."
+                  />
+                </label>
+                <label>
+                  Supporting transcript turn
+                  <NativeSelect
+                    value={entry.turn_index}
+                    onChange={(e) => {
+                      const index = Number(e.target.value);
+                      update({
+                        turn_index: index,
+                        span: call.turns[index].text.slice(0, 6000),
+                      });
+                    }}
+                  >
+                    {call.turns.map((turn, i) => (
+                      <NativeSelectOption key={i} value={i}>
+                        Turn {i + 1} · {turn.role} · {turn.text.slice(0, 70)}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </label>
+                <div className="selected-turn-text">
+                  {call.turns[entry.turn_index].text}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      update({
+                        span: call.turns[entry.turn_index].text.slice(0, 6000),
+                      })
+                    }
+                  >
+                    Use this excerpt <ArrowRight size={13} />
+                  </button>
+                </div>
+                <label>
+                  Verbatim evidence
+                  <textarea
+                    aria-label="Verbatim evidence"
+                    rows={2}
+                    maxLength={6000}
+                    value={entry.span}
+                    onChange={(e) => update({ span: e.target.value })}
+                    placeholder="Copy the relevant words from the selected turn."
+                  />
+                </label>
+                {entry.additional_evidence.length > 0 && (
+                  <details className="rounded-lg border border-slate-200 p-3 text-sm">
+                    <summary className="cursor-pointer font-medium text-slate-700">
+                      {entry.additional_evidence.length} additional citations
+                      retained
+                    </summary>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      These saved quotes stay attached when you edit the
+                      assessment. Remove a quote explicitly to leave it out of
+                      the new revision.
+                    </p>
+                    <div className="mt-3 space-y-3">
+                      {entry.additional_evidence.map((evidence, index) => (
+                        <div
+                          key={`${evidence.turn_index}-${index}`}
+                          className="rounded-lg bg-slate-50 p-3"
+                        >
+                          <blockquote className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
+                            {evidence.span}
+                          </blockquote>
+                          <details className="mt-2 text-xs leading-5 text-slate-600">
+                            <summary className="cursor-pointer font-medium text-sky-800">
+                              View source · Turn {evidence.turn_index + 1}
+                            </summary>
+                            <p className="mt-2 whitespace-pre-wrap break-words">
+                              {call.turns[evidence.turn_index]?.text ??
+                                'Source turn unavailable.'}
+                            </p>
+                          </details>
+                          <button
+                            type="button"
+                            className="mt-2 text-button text-xs"
+                            aria-label={`Remove additional citation ${index + 1} from turn ${evidence.turn_index + 1}`}
+                            onClick={() =>
+                              update({
+                                additional_evidence:
+                                  entry.additional_evidence.filter(
+                                    (_, position) => position !== index,
+                                  ),
+                              })
+                            }
+                          >
+                            <Trash2 size={12} />
+                            Remove citation
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+                <label>
+                  Coaching note <span className="optional-label">Optional</span>
+                  <textarea
+                    aria-label="Coaching note"
+                    rows={2}
+                    maxLength={2000}
+                    value={entry.coaching_note}
+                    onChange={(e) => update({ coaching_note: e.target.value })}
+                    placeholder="A specific action to practice next."
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="assessment-editor-footer">
+            <span>Saving preserves earlier assessments.</span>
+            <div>
+              {active < 7 && (
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => setActive(active + 1)}
+                >
+                  Next dimension <ChevronRight size={15} />
+                </button>
+              )}
+              <button
+                className="primary-button"
+                disabled={busy || complete !== 8}
+                onClick={async () => {
+                  if (locked.current) return;
+                  locked.current = true;
+                  setBusy(true);
+                  setError('');
+                  try {
+                    await api(`consultations/${call.id}/reviews`, 'POST', {
+                      rubric_id: rubric.id,
+                      base_assessment_id: call.latest?.id ?? '',
+                      dimensions: buildAssessmentDimensions(entries),
+                    });
+                  } catch (e) {
+                    setError(
+                      e instanceof Error
+                        ? e.message
+                        : 'Could not save the assessment.',
+                    );
+                    locked.current = false;
+                    setBusy(false);
+                    return;
+                  }
+                  // A confirmed write is successful even if the next read fails.
+                  onOpenChange(false);
+                  void onSaved();
+                }}
+              >
+                {busy ? <Busy>Saving</Busy> : 'Save assessment'}
+              </button>
+            </div>
+          </div>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );

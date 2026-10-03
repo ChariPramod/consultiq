@@ -168,7 +168,9 @@ sequenceDiagram
 
 `server/runtime.ts` verifies session admission before opening the database. `server/handler.ts` then resolves the selected workspace, applies owner/reviewer/viewer permissions, checks mutation origins and validates request bodies. Application responses use `Cache-Control: private, no-store`; a shared response cache cannot leak a workspace payload.
 
-The initial workspace response contains lightweight conversation/document summaries and recent job metadata. Full transcripts, assessment history and document text load when opened. Review queues, reviewer worklists, the practice inbox and eligible follow-up selection use bounded server queries rather than filtering only the bootstrap list. Scope-bound keyset cursors preserve the selected filters; they do not bypass authorization or freeze a database snapshot.
+The initial workspace response contains lightweight conversation/document summaries and recent job metadata. Full transcripts, assessment history and document text load when opened. Review queues, reviewer worklists, the practice inbox, eligible follow-up selection and analysis history use bounded server queries rather than filtering only the bootstrap list. Scope-bound keyset cursors preserve the selected filters; they do not bypass authorization or freeze a database snapshot.
+
+The client pins an open assessment draft to its original revision, ignores superseded detail responses, and separates confirmed writes from failed refreshes. Revision comparison uses saved records and suppresses numeric differences across rubric versions. Malformed run measurements become unavailable values instead of blocking the workspace. See [review and operational recovery](REVIEW_OPERATIONS_ITERATION.md) for these boundaries.
 
 Manual assessment edits append revisions. A client supplies the assessment it edited; the save checks the latest revision atomically. A conflicting save returns 409 instead of overwriting another review. Assignment edits use their own version guards, and practice completion pins the reviewed baseline and follow-up assessments.
 

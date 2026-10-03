@@ -34,6 +34,62 @@ async function setup(t) {
   return { db, repo, other, api };
 }
 
+test('malformed run measurements cannot break workspace bootstrap or expose extra telemetry fields', async (t) => {
+  const { repo, api } = await setup(t);
+  const call = await repo.createCall({
+    title: 'Synthetic measurement recovery',
+    coordinator: 'Fixture',
+    source: 'synthetic',
+    recorded_at: '2026-10-02',
+    transcript: 'Coordinator: Would Thursday work?\nPatient: Thursday is fine.',
+  });
+  const valid = {
+    schema_version: 1,
+    total_ms: 20,
+    model_ms: 15,
+    validation_save_ms: 4,
+    input_tokens: 10,
+    output_tokens: null,
+  };
+  const fixtures = [
+    ['bad-json', '{truncated'],
+    ['wrong-schema', '{"schema_version":8}'],
+    ['invalid-number', JSON.stringify({ ...valid, total_ms: -1 })],
+    [
+      'allowlisted',
+      JSON.stringify({
+        ...valid,
+        private_prompt: 'PRIVATE_TELEMETRY_SENTINEL',
+      }),
+    ],
+  ];
+  for (const [id, raw] of fixtures) {
+    await repo
+      .statement(
+        'INSERT INTO analysis_jobs(id,workspace_id,call_id,kind,status,created_at,telemetry_json) VALUES(?,?,?,?,?,?,?)',
+        id,
+        repo.workspaceId,
+        call.id,
+        'scoring',
+        'completed',
+        when,
+        raw,
+      )
+      .run();
+  }
+  const response = await api('user_owner', 'workspace');
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.jobs.length, 4);
+  for (const job of data.jobs) {
+    assert.deepEqual(job.telemetry, job.id === 'allowlisted' ? valid : null);
+  }
+  assert.doesNotMatch(
+    JSON.stringify(data),
+    /PRIVATE_TELEMETRY_SENTINEL|private_prompt/,
+  );
+});
+
 test('bootstrap is bounded metadata beyond 200 calls with stable ID ordering and latest review identities', async (t) => {
   const { db, repo } = await setup(t);
   await repo
