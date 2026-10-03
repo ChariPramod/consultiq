@@ -34,7 +34,7 @@ async function setup(t) {
   return { db, repo, other, api };
 }
 
-test('bootstrap is bounded metadata beyond 200 calls and keeps latest review identities required by follow-up selection', async (t) => {
+test('bootstrap is bounded metadata beyond 200 calls with stable ID ordering and latest review identities', async (t) => {
   const { db, repo } = await setup(t);
   await repo
     .statement(
@@ -123,14 +123,22 @@ test('bootstrap is bounded metadata beyond 200 calls and keeps latest review ide
   const overview = await repo.overview();
   assert.equal(overview.total, 237);
   assert.equal(overview.calls.length, 200);
-  assert.equal(overview.calls[0].id, 'call-236');
-  assert.equal(overview.calls.at(-1).id, 'call-37');
-  assert.deepEqual(overview.calls[0].latest, {
-    id: 'human-latest',
-    kind: 'human',
-    rubric_id: 'rubric',
-    created_at: when,
-  });
+  assert.deepEqual(
+    overview.calls.map((call) => call.id),
+    Array.from({ length: 237 }, (_, i) => `call-${i}`)
+      .sort()
+      .reverse()
+      .slice(0, 200),
+  );
+  assert.deepEqual(
+    overview.calls.find((call) => call.id === 'call-236').latest,
+    {
+      id: 'human-latest',
+      kind: 'human',
+      rubric_id: 'rubric',
+      created_at: when,
+    },
+  );
   assert.equal(overview.calls[0].coordinator, 'Fixture coordinator');
   assert.equal(overview.calls[0].recorded_at, '2026-10-03');
   for (const call of overview.calls) {

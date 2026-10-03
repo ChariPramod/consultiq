@@ -40,8 +40,9 @@ npm run doctor
 - Quote validation against the cited transcript turn; unsupported scores remain unscored.
 - Optional Claude analysis through a persistent queue, separate worker, cancellation, lease recovery and daily request limits.
 - Saved analysis timings and reported input/output tokens, including available usage on failures.
-- Approved document ingestion, keyword retrieval, and citation-validated RAG coaching.
+- Approved document ingestion with duplicate-content prevention, keyword retrieval, and citation-validated RAG coaching.
 - Append-only coaching decisions, manual practice assignments and pinned human-reviewed follow-up comparisons.
+- Paginated follow-up search across the workspace and owner-only storage usage by area and table.
 - Optional LangSmith tracing with separate model and validation/save stages; content and raw errors excluded.
 - Offline assessment evaluation against independently supplied references, with coverage and abstention reporting.
 
@@ -67,6 +68,12 @@ Use the public `/tour` walkthrough to explain the workflow and exercise the actu
 
 [Reviewer assignments, practice inbox, whole-workspace insights and transcript tools](docs/TEAM_WORKFLOW_ITERATION.md) are implemented. Apply migration 0005 before authenticated use of this release.
 
+## Architecture and query improvements
+
+The [overall architecture and query/response diagrams](docs/ARCHITECTURE.md) describe the current Next.js, Clerk, Turso and background-worker paths, including failure handling. Editable Mermaid sources and rendered SVGs are included.
+
+[Storage and query optimization](docs/STORAGE_QUERY_OPTIMIZATION.md) documents the new indexes, atomic library deduplication, storage inventory, follow-up search and reproducible local query-plan measurements. Apply all pending migrations through **0006** before authenticated use. Existing documents, citation IDs and review history are preserved.
+
 ## Pilot workflow additions
 
 [Batch CSV import, the paginated review queue, evidence exports and calendar handoff](docs/PILOT_WORKFLOW_SPRINT.md) are implemented. These support a training-team pilot; native CRM/calendar synchronization and commercial readiness remain unverified.
@@ -90,7 +97,9 @@ See [the team, background processing, evaluation and operations implementation](
 - [Data, cloud, market research and next build](docs/DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md)
 - [Your actions and decisions](docs/OWNER_ACTIONS.md)
 - [Product direction and release gates](docs/PRODUCT_PLAN.md)
-- [Implementation and architecture](docs/IMPLEMENTATION.md)
+- [Architecture diagrams and request flows](docs/ARCHITECTURE.md)
+- [Implementation and API contracts](docs/IMPLEMENTATION.md)
+- [Storage, query measurements and rollout](docs/STORAGE_QUERY_OPTIMIZATION.md)
 - [Setup, operation, and deployment](docs/OPERATIONS.md)
 - [Validation and known limits](docs/VALIDATION.md)
 

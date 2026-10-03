@@ -24,6 +24,7 @@
     "verify:hosted": "node --env-file-if-exists=.env.local scripts/verify-hosted.mjs",
     "evaluate:retrieval": "node --experimental-strip-types scripts/evaluate-retrieval.mjs",
     "evaluate:gate": "node --experimental-strip-types scripts/evaluate-gate.mjs",
+    "benchmark:queries": "node --experimental-strip-types scripts/benchmark-queries.mjs",
     "verify:workflow": "node --env-file-if-exists=.env.local scripts/verify-hosted-workflow.mjs"
   },
   "dependencies": {

@@ -27,7 +27,17 @@ export const calls = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
   (t) => [
-    index('consultations_workspace_created').on(t.workspaceId, t.createdAt),
+    index('consultations_workspace_created_id').on(
+      t.workspaceId,
+      t.createdAt,
+      t.id,
+    ),
+    index('consultations_workspace_coordinator_recorded').on(
+      t.workspaceId,
+      t.coordinator,
+      t.recordedAt,
+      t.id,
+    ),
   ],
 );
 export const rubrics = sqliteTable(
@@ -73,9 +83,15 @@ export const documents = sqliteTable(
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     body: text('body').notNull(),
+    bodySha256: text('body_sha256'),
     createdAt: text('created_at').notNull(),
   },
-  (t) => [index('knowledge_workspace').on(t.workspaceId)],
+  (t) => [
+    uniqueIndex('knowledge_workspace_body_hash').on(
+      t.workspaceId,
+      t.bodySha256,
+    ),
+  ],
 );
 export const chunks = sqliteTable(
   'knowledge_chunks',
@@ -91,7 +107,7 @@ export const chunks = sqliteTable(
     body: text('body').notNull(),
   },
   (t) => [
-    index('chunks_workspace').on(t.workspaceId),
+    index('chunks_workspace_id').on(t.workspaceId, t.id),
     uniqueIndex('chunks_document_position').on(t.documentId, t.position),
   ],
 );
@@ -139,7 +155,8 @@ export const jobs = sqliteTable(
   (t) => [
     index('jobs_workspace_created').on(t.workspaceId, t.createdAt),
     uniqueIndex('jobs_workspace_request').on(t.workspaceId, t.requestKey),
-    index('jobs_status_created').on(t.status, t.createdAt),
+    index('jobs_status_created_id').on(t.status, t.createdAt, t.id),
+    index('jobs_workspace_call_status').on(t.workspaceId, t.callId, t.status),
   ],
 );
 export const events = sqliteTable(
@@ -200,7 +217,10 @@ export const practiceAssignments = sqliteTable(
     instruction: text('instruction').notNull(),
     createdAt: text('created_at').notNull(),
   },
-  (t) => [index('practice_workspace_call').on(t.workspaceId, t.callId)],
+  (t) => [
+    index('practice_workspace_call').on(t.workspaceId, t.callId),
+    index('practice_workspace_created_id').on(t.workspaceId, t.createdAt, t.id),
+  ],
 );
 export const practiceCompletions = sqliteTable('practice_completions', {
   id: text('id').primaryKey(),

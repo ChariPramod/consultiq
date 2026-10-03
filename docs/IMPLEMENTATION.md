@@ -2,39 +2,37 @@
 
 ## Request and data flow
 
-The React application calls same-origin API routes. The Next.js Node runtime verifies a Clerk session and checks an explicit user-ID allowlist, resolves its private workspace, and scopes repository operations to that workspace. Hosted libSQL stores records; data does not depend on browser local storage.
+See [the overall architecture and query/response diagrams](ARCHITECTURE.md) for deployment boundaries, asynchronous analysis, storage/query design and failure recovery. The editable diagram sources are in [`docs/diagrams/`](diagrams/).
 
-```mermaid
-flowchart LR
-  UI[Review workspace] --> API[Authenticated API]
-  API --> DB[(libSQL records)]
-  API --> R[Approved rubric]
-  R --> M[Configured model]
-  M --> V[Quote validation]
-  V --> H[Saved assessment and human review]
-  API --> K[Approved source retrieval]
-  K --> C[Coaching generation]
-  C --> Q[Citation validation]
-  Q --> DB
-```
+The React application calls same-origin Next.js Node API routes. Clerk supplies verified session identity; the deployment allowlist and selected workspace's owner/reviewer/viewer membership govern access. The handler passes that verified actor into workspace-scoped repositories. Hosted libSQL stores records and durable job intent; browser storage is not a record store.
+
+Ordinary queries return lightweight summaries or explicitly requested detail. Human mutations use guarded transactions and append review revisions. Analysis requests persist a queued job and return 202; a separately dispatched worker rechecks access and inputs, calls the provider, validates evidence, and atomically commits result, audit and completed job status. The browser refreshes stored state. Missing credentials fail closed, and deployment of the public page does not verify the authenticated workflow.
 
 ## Code boundaries
 
 | Location | Responsibility |
 | --- | --- |
-| `app/page.tsx`, `app/marketing.css` | Product landing page |
-| `app/workspace/` | Persistent review, library, rubric and settings interfaces |
-| `components/ui/` | Shared shadcn/Base UI primitives |
-| `lib/product.ts` | Domain types, transcript/rubric validation, CSV export |
-| `lib/evidence.ts`, `lib/assessment.ts` | Deterministic quote checks and supported-score rules |
-| `server/handler.ts` | HTTP authentication, origin checks, body limits and routing |
-| `server/repository.ts` | Workspace-scoped persistence and state transitions |
-| `server/ai.ts` | Assessment and RAG orchestration |
-| `server/observability.ts` | Content-free nested tracing and isolated trace delivery |
-| `server/model.ts` | Configured provider HTTP adapter, bounded response reads and sanitized failures |
-| `lib/evaluation.ts`, `scripts/evaluate.mjs` | Offline aggregate comparison against independent reference scores |
-| `db/schema.ts`, `drizzle/` | Database definition and generated migration history |
-| `tests/` | Domain and API tests against real SQLite migrations |
+| `app/page.tsx`, `app/tour/`, `app/marketing.css` | Public product pages and labeled synthetic walkthrough |
+| `app/workspace/`, `components/ui/` | Review, team, learning and operations interfaces using shared UI primitives |
+| `lib/api.ts` | Same-origin requests, selected-workspace header, deliberate analysis request keys and uncertain-save messaging |
+| `proxy.ts`, `server/session.ts`, `server/access.ts` | Clerk integration and explicit pilot admission; separate worker-secret boundary |
+| `app/api/[...path]/route.ts`, `server/runtime.ts` | Public API runtime, verified identity, database lifecycle and sanitized infrastructure failures |
+| `server/handler.ts` | Workspace/role routing, mutation-origin checks, request limits and endpoint dispatch |
+| `server/team.ts` | Workspace resolution, actor-bound invitations and membership revocation |
+| `server/repository.ts`, `server/database.ts` | Scoped persistence, evidence guards, transactional batches and foreign-key enforcement |
+| `server/consultation-query.ts`, `server/practice-inbox.ts`, `server/followup-candidates.ts` | Bounded workspace queries and scope-bound keyset pagination |
+| `server/review-tasks.ts`, `server/learning.ts` | Versioned reviewer assignments, coaching decisions and pinned practice completion |
+| `server/insights.ts`, `server/operations.ts`, `server/storage.ts` | Workspace aggregates, owner operations and logical storage inspection |
+| `server/queue.ts`, `server/worker-auth.ts` | Durable analysis admission, atomic claims, lease recovery and cancellation |
+| `app/api/internal/worker/route.ts`, `scripts/worker.mjs`, `.github/workflows/worker.yml` | Secret-authenticated dispatch and alternative supervised worker |
+| `server/ai.ts`, `server/model.ts` | Scoring/RAG orchestration and bounded, sanitized provider requests |
+| `lib/product.ts`, `lib/evidence.ts`, `lib/assessment.ts` | Domain validation, exact quote checks and supported-score rules |
+| `lib/retrieval.ts` | Shared deterministic keyword ranking for production and retrieval evaluation |
+| `server/observability.ts`, `server/telemetry.ts` | Content-free nested traces and versioned analysis measurements |
+| `server/exports.ts`, `lib/bulk-import.ts`, `lib/calendar.ts` | Explicit evidence exports, browser CSV validation and calendar-file handoff |
+| `lib/evaluation*.ts`, `lib/retrieval-evaluation.ts`, `scripts/evaluate*.mjs` | Offline assessment/retrieval metrics and explicit release comparisons |
+| `scripts/backup-workspace.mjs`, `scripts/restore-workspace.mjs`, `scripts/verify-hosted*.mjs` | Scoped backups, empty-staging restore and hosted acceptance checks |
+| `db/schema.ts`, `drizzle/`, `tests/` | Schema, append-only generated migration history and behavioral tests against migrated SQLite |
 
 ## Assessment invariants
 
@@ -50,20 +48,42 @@ This validates citation identity and text, not the semantic correctness of every
 
 ## API
 
-All application endpoints require authenticated identity. Mutation requests reject cross-origin browser writes. Responses are not cached.
+Application endpoints require verified session admission and workspace authorization. Mutation requests reject cross-origin browser writes. Responses are not cached. Owner-only restrictions are enforced server-side; disabling a UI control is not an access boundary.
 
 | Method | Path | Operation |
 | --- | --- | --- |
-| GET / PATCH | `/api/workspace` | Read workspace / rename |
-| POST | `/api/consultations` | Import transcript |
-| GET / PATCH / DELETE | `/api/consultations/:id` | Read / update recorded outcome / delete |
-| POST | `/api/consultations/:id/reviews` | Append human assessment |
-| POST | `/api/consultations/:id/score` | Run configured model assessment |
-| POST | `/api/consultations/:id/coaching` | Generate supported coaching |
-| POST | `/api/rubrics` | Publish approved version |
-| POST | `/api/library` | Add approved document |
-| GET | `/api/library/search?q=` | Retrieve approved passages |
-| DELETE | `/api/library/:id` | Remove document and dependent coaching content |
+| GET | `/api/workspaces` | List personal/member workspaces for the verified user |
+| GET / PATCH | `/api/workspace` | Read lightweight bootstrap / owner rename |
+| GET / POST | `/api/consultations` | Query the paginated review queue / import transcript |
+| GET / PATCH / DELETE | `/api/consultations/:id` | Read detail / update recorded outcome / owner delete |
+| GET | `/api/consultations/:id/export?format=` | Export scoped evidence as explicit CSV/JSON fields |
+| POST | `/api/consultations/:id/reviews` | Append human assessment with a latest-revision guard |
+| POST | `/api/consultations/:id/score` | Admit model assessment to the queue; return 202 |
+| POST | `/api/consultations/:id/coaching` | Admit source-grounded coaching to the queue; return 202 |
+| GET / PATCH | `/api/consultations/:id/review-task` | Read / update a versioned reviewer assignment |
+| GET | `/api/review-tasks` | Query the reviewer worklist |
+| GET | `/api/consultations/:id/learning` | Read coaching decisions and pinned practice history |
+| POST | `/api/coaching/:id/reviews` | Append a coaching review decision |
+| POST | `/api/consultations/:id/practice` | Assign practice from a human-reviewed baseline |
+| GET | `/api/practice` | Query the workspace practice inbox |
+| GET | `/api/practice/:id/candidates` | Search eligible follow-up assessments across the workspace |
+| POST | `/api/practice/:id/complete` | Pin a valid follow-up assessment and reflection |
+| GET / POST | `/api/rubrics` | List published versions / owner publish approved version |
+| GET | `/api/rubrics/:id` | Read a scoped immutable rubric version |
+| POST | `/api/library` | Owner add approved document; reject exact duplicate bodies |
+| GET | `/api/library/search?q=` | Retrieve approved scoped passages |
+| GET / DELETE | `/api/library/:id` | Load source text / owner remove document and dependent coaching content |
+| GET | `/api/team` | Read the workspace roster; only the owner receives pending invitations |
+| POST | `/api/team/invitations` | Owner create or rotate an actor-bound invitation |
+| POST | `/api/team/accept` | Accept a token as its verified invitee; selected-workspace header is not used |
+| DELETE | `/api/team/members/:userId` | Owner revoke membership and cancel that member's active jobs |
+| DELETE | `/api/team/invitations/:id` | Owner revoke an invitation |
+| POST | `/api/jobs/:id/cancel` | Owner or requesting reviewer cancel active analysis |
+| GET | `/api/insights` | Read all-time workspace counts and rubric-separated aggregates |
+| GET | `/api/operations` | Owner inspect queue/failure/lease aggregates |
+| GET | `/api/storage` | Owner inspect scoped row counts and logical text bytes |
+
+`GET` or `POST /api/internal/worker` is a separate service endpoint: it requires the exact server-side `CRON_SECRET` bearer value and bypasses Clerk middleware. It accepts no caller-selected workspace, processes at most one claim per dispatch, and is never called by the browser. A 200 dispatch response is not proof of successful analysis; read the job outcome. The [architecture failure contract](ARCHITECTURE.md#failure-contract) distinguishes admission responses, persisted worker failures and uncertain saves.
 
 ## Identity and operation limits
 
@@ -71,7 +91,7 @@ All application endpoints require authenticated identity. Mutation requests reje
 
 Personal workspaces support owner-managed reviewer/viewer memberships, actor-bound invitations and revocation. Selected workspace IDs are resolved against verified identity on every request. The pilot allowlist remains an additional admission boundary. Vercel preview Deployment Protection supplies an additional host boundary; production domain privacy must be verified separately before promotion.
 
-Hosted analysis requests now persist a queued intent and return 202. A separate privileged worker claims jobs, checks pinned inputs and requester permissions, and runs generation under a nonrenewable lease. Daily limits and duplicate-running checks constrain provider use. There is no automatic paid retry or token-cost ledger. Library and loaded-consultation limits are intentional pilot constraints, not a scaling claim.
+Hosted analysis requests now persist a queued intent and return 202. A separate privileged worker claims jobs, checks pinned inputs and requester permissions, and runs generation under a nonrenewable lease. Daily limits and duplicate-running checks constrain provider use. There is no automatic paid retry or token-cost ledger. Library and bootstrap-summary limits are intentional pilot constraints. Paginated consultation, reviewer, practice and eligible follow-up queries cover the full authorized workspace; this is not a hosted scale benchmark.
 
 ## Observability
 
@@ -118,3 +138,9 @@ Successful AI persistence now commits the result, audit event and completed job 
 ## Team workflow and lightweight workspace bootstrap
 
 `server/review-tasks.ts` owns versioned reviewer assignments and immutable change history. `server/practice-inbox.ts` reads pinned practice summaries; `server/insights.ts` computes all-time, workspace-scoped aggregates without mixed-rubric means. Bootstrap now returns consultation and document summaries; `/api/library/:id` loads full scoped source text on demand. New schema is migration 0005. See [team workflow and limitations](TEAM_WORKFLOW_ITERATION.md).
+
+## Storage and query improvements
+
+`server/storage.ts` returns owner-only counts and logical UTF-8 text bytes in one scoped aggregate statement. It excludes physical allocation, index overhead, replicas, backups and provider billing. `knowledge_documents.body_sha256` plus the workspace/hash unique index rejects exact trimmed-body duplicate imports; an atomic exact-body guard also covers older null-hash rows. This does not delete or rewrite existing sources.
+
+`server/followup-candidates.ts` searches eligible latest human assessments using workspace/assignment/query-bound keyset cursors. The UI no longer depends on the newest 200 bootstrap summaries to complete practice. Eligibility and approval are rechecked by the completion mutation. Query-specific indexes support these paths and existing review/queue reads; generated migrations remain the authoritative DDL. See [storage and query design](ARCHITECTURE.md#storage-and-query-design) for remaining scan/history costs and measurement boundaries.

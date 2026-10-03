@@ -260,3 +260,150 @@ test('foreign consultations and cross-origin assignment requests cannot write or
     0,
   );
 });
+
+test('storage metrics require workspace ownership and never return stored content', async (t) => {
+  const { repo, other, request } = await setup(t);
+  for (const user of [null, 'user_reviewer', 'user_viewer', 'user_other']) {
+    const response = await request(user, 'storage');
+    assert.equal(response.status, user === null ? 401 : 403);
+  }
+  const first = await request('user_owner', 'storage');
+  assert.equal(first.status, 200);
+  assert.match(first.headers.get('cache-control'), /no-store/);
+  const before = await first.json();
+  assert.ok(before.logical_text_bytes > 0);
+  assert.equal(
+    before.tables.find((row) => row.table === 'consultations').records,
+    1,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(before),
+    /Would Thursday work|Test coordinator|Other workspace secret|user_owner/,
+  );
+  await other.addDocument({
+    title: 'Private',
+    body: 'Other workspace secret '.repeat(500),
+    approved: true,
+  });
+  const after = await (await request('user_owner', 'storage')).json();
+  assert.equal(after.logical_text_bytes, before.logical_text_bytes);
+  assert.equal(after.total_records, before.total_records);
+  assert.equal(
+    (await request('user_owner', 'storage', { workspace: other.workspaceId }))
+      .status,
+    403,
+  );
+  await repo.addDocument({
+    title: 'Own fixture',
+    body: 'Synthetic local material',
+    approved: true,
+  });
+  const changed = await (await request('user_owner', 'storage')).json();
+  assert.ok(changed.logical_text_bytes > before.logical_text_bytes);
+  assert.equal(
+    changed.tables.find((row) => row.table === 'knowledge_documents').records,
+    1,
+  );
+});
+
+test('follow-up candidate API enforces membership, scopes assignments and bounds payloads', async (t) => {
+  const { repo, other, call, request } = await setup(t);
+  const at = '2026-09-22T10:00:00.000Z';
+  await repo
+    .statement(
+      'INSERT INTO rubrics(id,workspace_id,title,definitions,created_at) VALUES(?,?,?,?,?)',
+      'candidate-rubric',
+      repo.workspaceId,
+      'Mechanical fixture',
+      '[]',
+      at,
+    )
+    .run();
+  const followup = await repo.createCall({
+    title: 'Searchable follow-up fixture',
+    coordinator: call.coordinator,
+    source: 'synthetic',
+    recorded_at: '2026-09-23',
+    transcript:
+      'Coordinator: Private conversation.\nPatient: Private response.',
+  });
+  for (const [id, callId] of [
+    ['baseline-fixture', call.id],
+    ['followup-fixture', followup.id],
+  ]) {
+    await repo
+      .statement(
+        'INSERT INTO assessments(id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+        id,
+        repo.workspaceId,
+        callId,
+        'candidate-rubric',
+        'human',
+        '{"dimensions":[],"private":"Hidden assessment content"}',
+        'fixture',
+        'human',
+        at,
+      )
+      .run();
+  }
+  await repo
+    .statement(
+      'INSERT INTO practice_assignments(id,workspace_id,call_id,baseline_id,dimension,instruction,created_at) VALUES(?,?,?,?,?,?,?)',
+      'candidate-practice',
+      repo.workspaceId,
+      call.id,
+      'baseline-fixture',
+      1,
+      'Private practice instruction',
+      at,
+    )
+    .run();
+  const path = 'practice/candidate-practice/candidates';
+  assert.equal(
+    (
+      await request(null, path, {
+        headers: { 'X-Sites-User-Id': 'user_owner' },
+      })
+    ).status,
+    401,
+  );
+  assert.equal((await request('user_other', path)).status, 403);
+  assert.equal(
+    (await request('user_other', path, { workspace: other.workspaceId }))
+      .status,
+    404,
+  );
+  assert.equal((await request('user_owner', path + '?limit=51')).status, 422);
+  for (const user of ['user_owner', 'user_reviewer', 'user_viewer']) {
+    const response = await request(user, path + '?q=Searchable&limit=1');
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const result = await response.json();
+    assert.equal(result.candidates.length, 1);
+    assert.equal(result.candidates[0].assessment_id, 'followup-fixture');
+    assert.equal(result.next_cursor, null);
+    assert.doesNotMatch(
+      JSON.stringify(result),
+      /Private conversation|Hidden assessment content|Private practice instruction/,
+    );
+  }
+  // The picker must not offer an old human revision once AI becomes latest.
+  await repo
+    .statement(
+      'INSERT INTO assessments(id,workspace_id,call_id,rubric_id,kind,content,prompt_version,model,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      'new-ai-fixture',
+      repo.workspaceId,
+      followup.id,
+      'candidate-rubric',
+      'ai',
+      '{"dimensions":[]}',
+      'fixture',
+      'fixture',
+      '2026-09-23T10:00:00.000Z',
+    )
+    .run();
+  assert.deepEqual(
+    (await (await request('user_reviewer', path)).json()).candidates,
+    [],
+  );
+});

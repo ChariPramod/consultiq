@@ -38,7 +38,7 @@ Navigation now follows the training workflow: insights, assigned reviews, practi
 
 Workspace bootstrap returns bounded consultation metadata and latest-assessment identity, not full transcripts and review bodies. Only consultation detail opens full source content. Library bootstrap returns short previews and character counts; opening a document loads its full body through a separate workspace-scoped request, with per-selection error/retry handling. This also reduces repeated data transfer while job polling is active.
 
-The follow-up picker still considers the most recent 200 consultation summaries. This is explicitly a remaining limit, not whole-workspace candidate search. The new insights, review queue, assignments and practice inbox are not limited to those 200 records.
+The initial follow-up picker considered the most recent 200 consultation summaries. The subsequent [storage and query iteration](STORAGE_QUERY_OPTIMIZATION.md) removes that limit with scoped server search and keyset pagination. Insights, the review queue, assignments and the practice inbox also operate beyond those 200 records.
 
 ## API and migration
 

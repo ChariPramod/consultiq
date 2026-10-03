@@ -3,12 +3,17 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { BookCheck, ClipboardList, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import type {
+  FollowupCandidate,
+  FollowupCandidatePage,
+} from '@/lib/followup-candidates';
 import { PracticeCalendar } from './practice-calendar';
 import {
   comparison,
@@ -16,24 +21,17 @@ import {
   type CoachingReview,
   type PracticeAssignment,
 } from '@/lib/learning';
-import {
-  DIMENSIONS,
-  type Coaching,
-  type CallRecord,
-  type WorkspaceCallSummary,
-} from '@/lib/product';
+import { DIMENSIONS, type Coaching, type CallRecord } from '@/lib/product';
 const blank: LearningData = { reviews: [], assignments: [] };
 export function LearningWorkspace({
   call,
   coaching,
-  calls,
   onHumanReview,
   onRefresh,
   readOnly = false,
 }: {
   call: CallRecord;
   coaching: Coaching[];
-  calls: WorkspaceCallSummary[];
   onHumanReview: () => void;
   onRefresh: () => Promise<void>;
   readOnly?: boolean;
@@ -141,8 +139,6 @@ export function LearningWorkspace({
                 key={assignment.id}
                 assignment={assignment}
                 readOnly={readOnly}
-                calls={calls}
-                call={call}
                 reviews={view.reviews}
                 onSaved={reload}
               />
@@ -452,7 +448,7 @@ function AssignmentForm({
           {call.coordinator}”. This does not send a notification or invite
           another user.
         </p>
-        <Button disabled={!instruction.trim()}>
+        <Button type="submit" disabled={!instruction.trim()}>
           Create practice assignment
         </Button>
       </fieldset>
@@ -466,20 +462,18 @@ function AssignmentForm({
 }
 function PracticeCard({
   assignment,
-  calls,
-  call,
   reviews,
   readOnly,
   onSaved,
 }: {
   assignment: PracticeAssignment;
-  calls: WorkspaceCallSummary[];
-  call: CallRecord;
   reviews: CoachingReview[];
   readOnly: boolean;
   onSaved: () => Promise<void>;
 }) {
-  const [assessment, setAssessment] = useState(''),
+  const [selected, setSelected] = useState<FollowupCandidate | null>(null),
+    [searchOpen, setSearchOpen] = useState(false),
+    [searchRevision, setSearchRevision] = useState(0),
     [reflection, setReflection] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -489,15 +483,6 @@ function PracticeCard({
     ? reviews.find((r) => r.coaching_id === original.coaching_id)
     : null;
   const valid = !assignment.review_id || current?.id === assignment.review_id;
-  const candidates = calls.filter(
-    (c) =>
-      c.id !== call.id &&
-      c.coordinator === call.coordinator &&
-      c.recorded_at >= call.recorded_at &&
-      c.latest?.kind === 'human' &&
-      c.latest.rubric_id === assignment.baseline.rubric_id &&
-      c.latest.created_at >= assignment.created_at,
-  );
   const scores = comparison(
     assignment.baseline,
     assignment.followup,
@@ -579,11 +564,22 @@ function PracticeCard({
             try {
               await api(`practice/${assignment.id}/complete`, 'POST', {
                 request_id: requestId,
-                assessment_id: assessment,
+                assessment_id: selected?.assessment_id,
                 reflection,
               });
+              setSelected(null);
+              setReflection('');
+              setRequestId(crypto.randomUUID());
               await onSaved();
             } catch (e) {
+              if (
+                e instanceof ApiError &&
+                (e.code === 'learning_conflict' || e.status === 404)
+              ) {
+                setSelected(null);
+                setSearchRevision((value) => value + 1);
+                setRequestId(crypto.randomUUID());
+              }
               setError(
                 e instanceof Error ? e.message : 'Could not link follow-up.',
               );
@@ -593,32 +589,70 @@ function PracticeCard({
           }}
         >
           <fieldset disabled={busy} className="space-y-3">
-            <label className="text-sm font-medium">
-              Follow-up human assessment
-              <NativeSelect
-                value={assessment}
-                onChange={(e) => {
-                  edit();
-                  setAssessment(e.target.value);
-                }}
-              >
-                <NativeSelectOption value="">
-                  Choose a reviewed consultation
-                </NativeSelectOption>
-                {candidates.map((c) => (
-                  <NativeSelectOption key={c.id} value={c.latest!.id}>
-                    {c.title} · {c.recorded_at}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-            {!candidates.length && (
-              <p className="text-sm text-slate-500">
-                Import another role-play for this coordinator and record a human
-                assessment with the same rubric. Its review must be created
-                after this assignment. Choices use the loaded consultation list.
+            <div className="space-y-3 rounded-xl border bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">
+                  Follow-up human assessment
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-expanded={searchOpen}
+                  aria-controls={`candidates-${assignment.id}`}
+                  onClick={() => setSearchOpen((value) => !value)}
+                >
+                  {searchOpen
+                    ? 'Close search'
+                    : selected
+                      ? 'Change follow-up'
+                      : 'Find a follow-up'}
+                </Button>
+              </div>
+              {selected ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <p>
+                    <strong>{selected.title}</strong> · {selected.recorded_at}
+                    <br />
+                    <span className="text-slate-500">
+                      Selected review {selected.assessment_id.slice(0, 8)}
+                    </span>
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      edit();
+                      setSelected(null);
+                    }}
+                  >
+                    Clear selection
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Search all eligible consultations in this workspace.
+                </p>
+              )}
+              {searchOpen && (
+                <FollowupSearch
+                  key={searchRevision}
+                  assignmentId={assignment.id}
+                  selected={selected}
+                  onSelect={(candidate) => {
+                    edit();
+                    setSelected(candidate);
+                  }}
+                />
+              )}
+              <p className="text-xs leading-relaxed text-slate-500">
+                Choices use the same coordinator and rubric, with a role-play
+                date on or after the baseline. The latest assessment must be
+                human-reviewed on or after this assignment. Eligibility is
+                checked again when you save.
               </p>
-            )}
+            </div>
             <Label htmlFor={`reflection-${assignment.id}`}>
               What changed, and what still needs practice?
             </Label>
@@ -632,8 +666,9 @@ function PracticeCard({
               }}
             />
             <Button
+              type="submit"
               variant="outline"
-              disabled={!assessment || !reflection.trim()}
+              disabled={!selected || !reflection.trim()}
             >
               Link reviewed follow-up
             </Button>
@@ -646,5 +681,205 @@ function PracticeCard({
         </p>
       )}
     </article>
+  );
+}
+
+function FollowupSearch({
+  assignmentId,
+  selected,
+  onSelect,
+}: {
+  assignmentId: string;
+  selected: FollowupCandidate | null;
+  onSelect: (candidate: FollowupCandidate | null) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [revision, setRevision] = useState(0);
+  const [result, setResult] = useState<{
+    key: string;
+    page: FollowupCandidatePage | null;
+    error: string;
+  } | null>(null);
+  const cursor = cursors.at(-1) ?? null;
+  const requestKey = JSON.stringify([assignmentId, query, cursor, revision]);
+  const current = result?.key === requestKey ? result : null;
+  const page = current?.page;
+  const error = current?.error;
+  const loading = !current;
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ q: query, limit: '25' });
+    if (cursor) params.set('cursor', cursor);
+    const send: typeof fetch = (input, init) =>
+      fetch(input, {
+        ...init,
+        signal: init?.signal
+          ? AbortSignal.any([controller.signal, init.signal])
+          : controller.signal,
+      });
+    void api<FollowupCandidatePage>(
+      `practice/${assignmentId}/candidates?${params}`,
+      'GET',
+      undefined,
+      send,
+    ).then(
+      (value) => {
+        if (active) setResult({ key: requestKey, page: value, error: '' });
+      },
+      (failure: unknown) => {
+        if (active)
+          setResult({
+            key: requestKey,
+            page: null,
+            error:
+              failure instanceof Error
+                ? failure.message
+                : 'Could not load eligible follow-ups.',
+          });
+      },
+    );
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [assignmentId, query, cursor, requestKey]);
+  const search = () => {
+    setQuery(draft.trim());
+    setCursors([null]);
+    setRevision((value) => value + 1);
+  };
+  const options = page?.candidates ?? [];
+  const retained =
+    selected &&
+    !options.some(
+      (candidate) => candidate.assessment_id === selected.assessment_id,
+    );
+  return (
+    <div id={`candidates-${assignmentId}`} className="space-y-3 border-t pt-3">
+      <Label htmlFor={`candidate-search-${assignmentId}`}>
+        Search follow-up titles
+      </Label>
+      <div className="flex gap-2">
+        <Input
+          id={`candidate-search-${assignmentId}`}
+          value={draft}
+          maxLength={200}
+          placeholder="Find a reviewed role-play…"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              search();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={search}>
+          Search
+        </Button>
+      </div>
+      {loading && (
+        <output className="block text-sm text-slate-500">
+          Loading eligible follow-ups…
+        </output>
+      )}
+      {error && (
+        <div role="alert" className="space-y-2 text-sm text-amber-800">
+          <p>{error} Your selected follow-up and reflection are preserved.</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCursors([null]);
+              setRevision((value) => value + 1);
+            }}
+          >
+            Reload choices
+          </Button>
+        </div>
+      )}
+      {page && (
+        <>
+          {options.length ? (
+            <>
+              <Label htmlFor={`candidate-choice-${assignmentId}`}>
+                Eligible human assessments
+              </Label>
+              <NativeSelect
+                id={`candidate-choice-${assignmentId}`}
+                className="w-full"
+                value={selected?.assessment_id ?? ''}
+                onChange={(event) =>
+                  onSelect(
+                    options.find(
+                      (candidate) =>
+                        candidate.assessment_id === event.target.value,
+                    ) ??
+                      (selected?.assessment_id === event.target.value
+                        ? selected
+                        : null),
+                  )
+                }
+              >
+                <NativeSelectOption value="">
+                  Choose a reviewed consultation
+                </NativeSelectOption>
+                {retained && (
+                  <NativeSelectOption value={selected.assessment_id}>
+                    Selected: {selected.title} · {selected.recorded_at}
+                  </NativeSelectOption>
+                )}
+                {options.map((candidate) => (
+                  <NativeSelectOption
+                    key={candidate.assessment_id}
+                    value={candidate.assessment_id}
+                  >
+                    {candidate.title} · {candidate.recorded_at}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <output className="block text-xs text-slate-500">
+                Page {cursors.length} · {options.length} eligible{' '}
+                {options.length === 1 ? 'consultation' : 'consultations'} shown
+              </output>
+            </>
+          ) : (
+            <output className="block text-sm text-slate-600">
+              {query
+                ? 'No eligible follow-ups match this title search. Clear the search to browse other choices.'
+                : 'No eligible follow-ups found. Import another role-play and record a human assessment with the same rubric.'}
+            </output>
+          )}
+          {(cursors.length > 1 || page.has_more) && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={cursors.length === 1}
+                onClick={() => setCursors((value) => value.slice(0, -1))}
+              >
+                Previous page
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!page.next_cursor}
+                onClick={() => {
+                  if (page.next_cursor)
+                    setCursors((value) => [...value, page.next_cursor]);
+                }}
+              >
+                Next page
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

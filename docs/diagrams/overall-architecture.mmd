@@ -1,0 +1,53 @@
+flowchart TB
+  accTitle: ConsultIQ overall architecture
+  accDescr: Browser workspace, authenticated Next.js API, workspace-scoped Turso storage, a separately dispatched analysis worker, model provider and isolated optional tracing.
+  subgraph Client[Browser]
+    Public["Public landing page and product tour<br/>Labeled synthetic illustrations"]
+    UI["Authenticated workspace<br/>Review queue · team · practice · insights"]
+  end
+
+  subgraph Vercel["Vercel · official Next.js · Node runtime"]
+    Pages["App Router pages<br/>React · TypeScript · shared UI primitives"]
+    API["Same-origin application API<br/>Verified identity · allowlist · workspace role"]
+    Domain["Domain services and scoped repositories<br/>Review revisions · library · team · learning"]
+    Queue["Durable analysis admission<br/>Idempotency key · pinned inputs · daily limit"]
+    Endpoint["Internal worker endpoint<br/>Exact server-secret authentication"]
+    Worker["Worker orchestration<br/>Claim lease · recheck access · retrieve · validate"]
+  end
+
+  Clerk["Clerk<br/>Session identity"]
+  DB[("Turso / libSQL<br/>Workspace-scoped records and job queue")]
+  Scheduler["GitHub Actions dispatcher<br/>Configured five-minute schedule"]
+  Claude["Anthropic model API<br/>Transcript + rubric or retrieved sources"]
+  Traces["Optional LangSmith<br/>Content-free model and validation/save spans"]
+  Ops["Operator commands<br/>Migrations · backup/restore · hosted checks"]
+  Evals["Offline evaluation commands<br/>Assessment · retrieval · release gates"]
+  Fixtures["Operator-supplied evaluation files<br/>Independent references and explicit thresholds"]
+
+  Public --> Pages
+  UI --> Pages
+  UI <-->|Sign-in and session| Clerk
+  UI -->|Scoped reads and mutations| API
+  API -->|Verified session| Clerk
+  API --> Domain
+  Domain <--> DB
+  API -->|AI requests| Queue
+  Queue -->|Persist intent before HTTP 202| DB
+  Scheduler -->|Server-only bearer secret| Endpoint
+  Endpoint --> Worker
+  Worker <-->|Scoped claims, source reads, atomic result writes| DB
+  Worker <-->|Bounded provider request| Claude
+  Worker -.->|Isolated trace delivery| Traces
+  Ops <-->|Explicit operator action| DB
+  Fixtures --> Evals
+
+  classDef client fill:#eef2ff,stroke:#6366f1,color:#172554
+  classDef runtime fill:#f0fdfa,stroke:#0d9488,color:#134e4a
+  classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+  classDef storage fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
+  classDef operator fill:#f8fafc,stroke:#64748b,color:#334155
+  class Public,UI client
+  class Pages,API,Domain,Queue,Endpoint,Worker runtime
+  class Clerk,Claude,Traces external
+  class DB storage
+  class Scheduler,Ops,Evals,Fixtures operator

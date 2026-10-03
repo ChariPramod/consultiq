@@ -43,6 +43,13 @@
       "when": 1790995813617,
       "tag": "0005_thankful_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790997675182,
+      "tag": "0006_gray_polaris",
+      "breakpoints": true
     }
   ]
 }

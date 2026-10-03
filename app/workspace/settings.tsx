@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Operations } from './operations';
+import { StoragePanel } from './storage';
 import {
   ArrowRight,
   BookOpen,
@@ -738,7 +739,12 @@ export function WorkspaceSettings({
           </p>
         )}
       </section>
-      {data.access.role === 'owner' && <Operations />}
+      {data.access.role === 'owner' && (
+        <>
+          <Operations />
+          <StoragePanel />
+        </>
+      )}
       <section className="settings-boundary">
         <ShieldCheck size={21} />
         <div>

@@ -1,0 +1,81 @@
+sequenceDiagram
+  accTitle: ConsultIQ query and response flow
+  accDescr: Session and workspace authorization, ordinary queries, durable analysis admission, independent worker validation and atomic persistence, followed by client refresh.
+  autonumber
+  actor User as Workspace user
+  participant API as Next.js API
+  participant DB as Turso / libSQL
+  participant Dispatch as Scheduler / operator
+  participant Worker as Queue worker
+  participant Model as Anthropic
+  participant Trace as LangSmith (optional)
+
+  User->>API: Request + session + selected workspace
+  API->>API: Verify Clerk identity and pilot allowlist
+  break Authentication or admission denied
+    API-->>User: 503 / 401 / 403, no workspace data read
+  end
+  API->>DB: Resolve owner or membership in selected workspace
+  DB-->>API: Workspace role or no access
+  API->>API: Check role, mutation origin, body and input limits
+  break Workspace or action forbidden
+    API-->>User: 403, no business mutation
+  end
+
+  alt Read or manual mutation
+    API->>DB: Scoped query or guarded transaction
+    DB-->>API: Summary, detail, or committed revision
+    API-->>User: JSON response, private, no-store
+    Note over API,DB: Stale revisions return 409, missing scoped records return 404
+  else AI assessment or coaching request
+    Note over User,API: Analysis POST includes a unique Idempotency-Key
+    API->>DB: Preflight inputs, atomically persist queued intent + audit
+    DB-->>API: New job or matching existing job
+    API-->>User: 202 with job ID and status
+    Note over User,DB: The browser may close, the durable job remains queued
+  end
+
+  rect rgb(240, 253, 250)
+    Note over Dispatch,Trace: Independent dispatch: one queued job per invocation
+    Dispatch->>Worker: Invoke secured endpoint or supervised CLI
+    Worker->>Worker: Remote endpoint verifies exact server secret
+    Worker->>DB: Discover routing metadata, expire scoped leases, claim one job
+    DB-->>Worker: Scoped job + three-minute nonrenewable lease, or no job
+    break No job claimed
+      Worker-->>Dispatch: processed: false
+    end
+    Worker->>DB: Recheck requester access and pinned assessment baseline
+    alt Assessment
+      Worker->>DB: Check active rubric, load pinned rubric and transcript
+    else Coaching
+      Worker->>DB: Load transcript, retrieve approved scoped passages
+    end
+    break Preflight rejected
+      Worker->>DB: Fail job without a model call
+      Worker-->>Dispatch: processed: true, job contains failure status
+    end
+    Worker->>Model: Transcript + approved rubric or top retrieved passages
+    Model-->>Worker: Bounded JSON response and available usage
+    Worker->>Worker: Validate structure and transcript quotes or source citations
+    alt Result valid and save guards pass
+      Worker->>DB: Atomic result + actor audit + completed job
+      Note over Worker,DB: Guard workspace, consultation, running lease and relevant input/source state
+      DB-->>Worker: Committed result
+    else Analysis failed or save blocked
+      Worker->>DB: Mark running job failed when applicable, preserve terminal state
+      Note over Worker,Model: No automatic paid retry, cancelled or expired work cannot publish
+    end
+    opt Tracing enabled
+      Worker-->>Trace: Completed metadata-only model and validation/save spans
+      Note over Worker,Trace: Delivery failure cannot replace the saved result or original error
+    end
+    opt Successful result
+      Worker->>DB: Best-effort run measurements
+    end
+    Worker-->>Dispatch: Dispatch result, inspect job status for analysis outcome
+  end
+
+  User->>API: Refresh or bounded visible-tab polling
+  API->>DB: Reauthorize workspace, read job state and selected detail
+  DB-->>API: Stored result or sanitized failure status
+  API-->>User: Updated review state, generated coaching requires human review

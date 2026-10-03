@@ -1,3 +1,5 @@
+import { storageUsage } from './storage.ts';
+import { queryFollowupCandidates } from './followup-candidates.ts';
 import { workspaceInsights } from './insights.ts';
 import { queryPracticeInbox } from './practice-inbox.ts';
 import { ReviewTasks, listReviewTasks } from './review-tasks.ts';
@@ -119,6 +121,26 @@ export async function handleApi(
       if (method === 'PATCH')
         return json(await tasks.save(taskMatch[1], await body(request)));
     }
+    if (path === '/api/storage' && method === 'GET') {
+      if (role !== 'owner')
+        throw new AppError(
+          403,
+          'access_denied',
+          'Only the workspace owner may inspect storage usage.',
+        );
+      return json(await storageUsage(repo));
+    }
+    const candidatesMatch = path.match(
+      /^\/api\/practice\/([^/]+)\/candidates$/,
+    );
+    if (candidatesMatch && method === 'GET')
+      return json(
+        await queryFollowupCandidates(
+          repo,
+          candidatesMatch[1],
+          url.searchParams,
+        ),
+      );
     if (path === '/api/operations' && method === 'GET') {
       if (role !== 'owner')
         throw new AppError(

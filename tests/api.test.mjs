@@ -539,11 +539,12 @@ for (const removed of ['cited source', 'uncited source', 'consultation']) {
         'Follow-up guide',
         'Additional follow-up guidance',
       ]) {
-        await call(db, 'library', 'POST', {
+        const added = await call(db, 'library', 'POST', {
           title,
-          body: 'Confirm the follow-up date and the person responsible for calling.',
+          body: `Confirm the follow-up date and the person responsible for calling. ${title}.`,
           approved: true,
         });
+        assert.equal(added.status, 201);
       }
       const result = await call(
         db,

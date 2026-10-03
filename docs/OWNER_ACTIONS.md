@@ -1,10 +1,17 @@
-> Hosting update: the Vercel migration supersedes Sites/D1 and `.dev.vars` instructions below. Follow [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) and `.env.example` for current setup. Earlier completion evidence remains historical.
-
 # Owner actions
 
 Engineering setup should not become homework for you. The remaining owner work is domain judgment, access to your accounts, approved source material, and commercial decisions. The application already supports importing material and recording reviews.
 
 See [the detailed project handoff](PROJECT_HANDOFF.md) for the full completed-work inventory, concrete owner deliverables and remaining engineering.
+
+## Current deployment gate
+
+The public site is deployed on Vercel. The authenticated workspace still needs the account setup in [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md). The latest environment check found only the worker dispatch secret configured in production; that does not enable sign-in, storage or analysis.
+
+- [ ] Finish Clerk application and Turso account/database setup. Put the Clerk keys, database connection/token and your exact Clerk user ID in the ignored `.env.local` file or Vercel production settings. Do not paste secret values into chat or GitHub. Use the existing Vercel URL for initial testing.
+- [ ] Provide the permitted reviewer identities for the pilot allowlist. Workspace owners can then issue reviewer/viewer invitations; accepting an invitation does not bypass the deployment allowlist.
+
+Once credentials are available, engineering can apply all migrations through **0006**, redeploy with the configured environment, test authenticated isolation/save/reload, exercise backup restoration and verify the worker before enabling its schedule. You do not need to implement those steps yourself. [Storage/query rollout](STORAGE_QUERY_OPTIMIZATION.md#verification-and-rollout) records the migration and older-backup compatibility requirements.
 
 ## Required for a useful first review
 
@@ -25,11 +32,11 @@ See [the detailed project handoff](PROJECT_HANDOFF.md) for the full completed-wo
 - [ ] Recruit a design-partner training team and agree on the review workflow, scope, feedback cadence, support contact, and price. No pricing or customer endorsement has been invented on the landing page.
 - [ ] Approve a held-out evaluation set and acceptance criteria with your domain reviewer. Decide what errors would make the product unsuitable. Keep evaluation examples separate from prompt/rubric iteration material.
 - [ ] Supply the business name, domain, support email, billing entity, and approved product language for public launch.
-- [ ] Decide whether the pilot needs shared teams. The current workspace belongs to one authenticated Sites user; customer organizations, invitations, and roles need additional engineering.
+- [ ] Decide which reviewers and viewers the pilot needs. Shared workspaces, role enforcement, invitations and revocation are implemented with Clerk identities; verify this access model with the first buyer. Customer self-service organization provisioning is not implemented.
 - [ ] Approve the data policy: allowed content, retention, deletion expectations, third-party processing, and access rules. Real patient data requires a separate readiness review and appropriate agreements before ingestion is enabled.
 
 ## Engineering work we can continue without delegating it to you
 
-Run the implemented evaluation tooling once independent labels and criteria exist; add team membership and authorization once the customer access model is agreed; build retryable background processing; add monitoring, backups and restore verification; improve retrieval against measured failures; implement billing after the commercial model is decided. These are tracked in [the product plan](PRODUCT_PLAN.md).
+Run the implemented evaluation tooling once independent labels and criteria exist; verify hosted team access and durable background processing; add external alerts, measured capacity and retention controls; exercise the existing backup/restore tools in staging; improve retrieval against measured failures; implement billing after the commercial model is decided. Analysis already has persistent queueing, cancellation and lease recovery; paid model calls are not automatically retried. These are tracked in [the product plan](PRODUCT_PLAN.md).
 
 You do not need to write the backend, wire the RAG pipeline, build the landing page, install LangSmith in the codebase, or create the source repository. Those are engineering deliverables in this change.

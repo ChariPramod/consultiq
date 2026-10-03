@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { retrievalTokens, rankRetrievedChunks } from '../lib/retrieval.ts';
 import type { AnalysisTelemetry } from './telemetry.ts';
 import {
@@ -120,30 +121,45 @@ export class Repository {
     ).all();
     return rows.results.map(readAssessment);
   }
-  async getCall(callId: string): Promise<CallRecord> {
+  private async callRow(callId: string) {
     const row = await this.statement(
       'SELECT * FROM consultations WHERE workspace_id=? AND id=?',
       this.workspaceId,
       callId,
     ).first();
     if (!row) throw new AppError(404, 'not_found', 'Consultation not found.');
-    const assessments = await this.assessmentList(callId);
+    return row;
+  }
+  async getCall(callId: string): Promise<CallRecord> {
+    const row = await this.callRow(callId);
+    const latest = await this.statement(
+      'SELECT * FROM assessments WHERE workspace_id=? AND call_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+      this.workspaceId,
+      callId,
+    ).first();
     return {
       ...row,
       turns: JSON.parse(String(row.turns)),
-      latest: assessments[0] ?? null,
+      latest: latest ? readAssessment(latest) : null,
     } as CallRecord;
   }
   async detail(callId: string) {
-    const call = await this.getCall(callId);
-    const rows = await this.statement(
-      'SELECT * FROM coaching_runs WHERE workspace_id=? AND call_id=? ORDER BY created_at DESC,rowid DESC LIMIT 20',
-      this.workspaceId,
-      callId,
-    ).all();
+    const row = await this.callRow(callId);
+    const [assessments, rows] = await Promise.all([
+      this.assessmentList(callId),
+      this.statement(
+        'SELECT * FROM coaching_runs WHERE workspace_id=? AND call_id=? ORDER BY created_at DESC,rowid DESC LIMIT 20',
+        this.workspaceId,
+        callId,
+      ).all(),
+    ]);
     return {
-      call,
-      assessments: await this.assessmentList(callId),
+      call: {
+        ...row,
+        turns: JSON.parse(String(row.turns)),
+        latest: assessments[0] ?? null,
+      } as CallRecord,
+      assessments,
       coaching: rows.results.map((row) => ({
         ...row,
         citations: JSON.parse(String(row.citations)),
@@ -164,7 +180,7 @@ export class Repository {
           FROM consultations c LEFT JOIN assessments a ON a.workspace_id=c.workspace_id AND a.call_id=c.id
             AND a.id=(SELECT b.id FROM assessments b WHERE b.workspace_id=c.workspace_id AND b.call_id=c.id
               ORDER BY b.created_at DESC,b.rowid DESC LIMIT 1)
-          WHERE c.workspace_id=? ORDER BY c.created_at DESC,c.rowid DESC LIMIT 200`,
+          WHERE c.workspace_id=? ORDER BY c.created_at DESC,c.id DESC LIMIT 200`,
           this.workspaceId,
         ).all<Record<string, string | null>>(),
         this.statement(
@@ -439,41 +455,84 @@ export class Repository {
         'approval_required',
         'Only approved material can enter the coaching library.',
       );
-    const count = await this.statement(
-      'SELECT COUNT(*) AS count FROM knowledge_documents WHERE workspace_id=?',
-      this.workspaceId,
-    ).first<{ count: number }>();
-    if ((count?.count ?? 0) >= 50)
-      throw new AppError(
-        422,
-        'library_limit',
-        'This pilot supports up to fifty documents.',
-      );
     const title = requiredText(data.title, 'document title', 150);
     const body = requiredText(data.body, 'document content', 60000);
+    const bodyHash = createHash('sha256').update(body, 'utf8').digest('hex');
     const documentId = id();
     const chunks = body.match(/[\s\S]{1,1800}/g) ?? [];
-    await this.db.batch([
+    // Admission, chunks and audit share a transaction. Legacy documents have a
+    // null hash; check their exact stored body without rewriting citation IDs.
+    const [saved] = await this.db.batch([
       this.statement(
-        'INSERT INTO knowledge_documents (id,workspace_id,title,body,created_at) VALUES (?,?,?,?,?)',
+        `INSERT INTO knowledge_documents (id,workspace_id,title,body,created_at,body_sha256)
+          SELECT ?,?,?,?,?,? WHERE
+          (SELECT COUNT(*) FROM knowledge_documents WHERE workspace_id=?)<50
+          AND NOT EXISTS (SELECT 1 FROM knowledge_documents WHERE workspace_id=?
+            AND (body_sha256=? OR (body_sha256 IS NULL AND body=?)))
+          ON CONFLICT(workspace_id,body_sha256) DO NOTHING`,
         documentId,
         this.workspaceId,
         title,
         body,
         now(),
+        bodyHash,
+        this.workspaceId,
+        this.workspaceId,
+        bodyHash,
+        body,
       ),
       ...chunks.map((chunk, position) =>
         this.statement(
-          'INSERT INTO knowledge_chunks (id,workspace_id,document_id,position,body) VALUES (?,?,?,?,?)',
+          'INSERT INTO knowledge_chunks (id,workspace_id,document_id,position,body) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM knowledge_documents WHERE id=? AND workspace_id=?)',
           id(),
           this.workspaceId,
           documentId,
           position,
           chunk,
+          documentId,
+          this.workspaceId,
         ),
       ),
-      this.event('knowledge_approved', documentId),
+      this.statement(
+        "INSERT INTO audit_events (id,workspace_id,action,entity_id,created_at,actor_id) SELECT ?,?,'knowledge_approved',?,?,? WHERE EXISTS (SELECT 1 FROM knowledge_documents WHERE id=? AND workspace_id=?)",
+        id(),
+        this.workspaceId,
+        documentId,
+        now(),
+        this.actorId,
+        documentId,
+        this.workspaceId,
+      ),
     ]);
+    if (!saved.meta.changes) {
+      const duplicate = await this.statement(
+        'SELECT id FROM knowledge_documents WHERE workspace_id=? AND (body_sha256=? OR (body_sha256 IS NULL AND body=?)) LIMIT 1',
+        this.workspaceId,
+        bodyHash,
+        body,
+      ).first();
+      if (duplicate)
+        throw new AppError(
+          409,
+          'duplicate_document',
+          'This exact content is already in your approved library. Use the existing document; no duplicate was saved.',
+        );
+      const count = await this.statement(
+        'SELECT COUNT(*) AS count FROM knowledge_documents WHERE workspace_id=?',
+        this.workspaceId,
+      ).first<{ count: number }>();
+      if ((count?.count ?? 0) < 50)
+        throw new AppError(
+          409,
+          'library_changed',
+          'The library changed during this request. No document was saved. Refresh before trying again.',
+        );
+      throw new AppError(
+        422,
+        'library_limit',
+        'This pilot supports up to fifty documents.',
+      );
+    }
     return { id: documentId, title, body };
   }
   async document(documentId: string): Promise<KnowledgeDocument> {

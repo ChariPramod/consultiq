@@ -17,6 +17,8 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | RAG coaching | Implemented with approved-document keyword retrieval and checked citations |
 | LangSmith | Nested model and validation/save tracing implemented, optional, content excluded |
 | Coaching review and practice | Implemented in the private workspace with pinned human-reviewed comparisons |
+| Follow-up discovery | Search and keyset pagination across all eligible workspace consultations; eligibility rechecked on save |
+| Storage visibility and document deduplication | Owner-only logical text inventory; exact approved-document duplicates rejected atomically |
 | Team access | Owner/reviewer/viewer membership, invitations and revocation implemented; pilot allowlist retained |
 | Background analysis | Persistent queue, separate worker, cancellation and lease fences implemented; worker deployment pending |
 | Customer self-service and billing | Pending |
@@ -36,7 +38,7 @@ The original plan proposed a separate Python service and Postgres. The applicati
 2. Complete live provider and tracing verification using owner credentials. Add evaluated fixtures, structured feedback, and release comparisons tied to prompt, rubric, and model versions.
 3. Verify implemented team membership, invitations, role enforcement and offboarding in the hosted environment. Extend pilot admission to customer self-service only after policy is agreed.
 4. Deploy and monitor the implemented persistent queue worker. Verify cancellation, duplicate dispatch and lease interruption with the live provider. Automatic paid retries remain deliberately disabled; add external alerts and measured throughput capacity.
-5. Consultation pagination, workspace insights and coordinator aggregates are implemented. Follow-up selection still uses the most recent 200 lightweight call summaries; extend candidate search before larger pilots. Queue CSV exports reflect the displayed page.
+5. Consultation pagination, workspace insights, coordinator aggregates and full-workspace follow-up selection are implemented. Measure hosted query latency and storage growth on representative consented data before larger pilots. Queue CSV exports reflect the displayed page.
 6. Establish backup and restore procedures, retention automation, incident response, accessibility and browser regression checks, and load testing.
 
 ## Commercial release
@@ -62,3 +64,5 @@ The team/queue/evaluation/operations increment is detailed in [Product reliabili
 [The pilot workflow sprint](PILOT_WORKFLOW_SPRINT.md) adds bulk CSV import, full-workspace consultation search, portable evidence exports and calendar-file downloads. Native customer-app integrations require a buyer use case and credentials.
 
 [The team workflow iteration](TEAM_WORKFLOW_ITERATION.md) adds reviewer ownership, UTC deadlines, versioned handoffs, the practice inbox, all-time aggregate insights and transcript search/copy. Apply migration 0005; live hosted verification remains credential-dependent.
+
+[Storage and query optimization](STORAGE_QUERY_OPTIMIZATION.md) adds migration 0006, duplicate-content prevention, an owner storage inventory and paginated follow-up discovery. The [architecture diagrams](ARCHITECTURE.md) describe the current implementation. Local synthetic query measurements do not establish hosted capacity or production latency.

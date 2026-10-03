@@ -436,7 +436,6 @@ export default function Review({
             readOnly={viewer}
             call={call}
             coaching={detail.coaching}
-            calls={data.calls}
             onRefresh={async () => {
               await reload();
               await onChanged();
