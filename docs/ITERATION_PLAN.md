@@ -1,6 +1,23 @@
 # Iterative execution plan
 
-Updated: September 21, 2026. This plan continues the implemented text-review product and the [research roadmap](DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md). It records planned work separately from completed work. It does not authorize fabricated rubric anchors, customer data or performance claims.
+Original milestones updated: September 21, 2026. Current status recorded: October 2, 2026. This plan continues the implemented text-review product and the [research roadmap](DATA_CLOUD_MARKET_AND_BUILD_STRATEGY.md). It records planned work separately from completed work. It does not authorize fabricated rubric anchors, customer data or performance claims.
+
+## Current execution status
+
+The dated milestones below are retained as an engineering history, not current claims that teams, durable jobs or Vercel migration are unfinished. [Product plan](PRODUCT_PLAN.md) is authoritative for present scope. The current runtime is official Next.js on Vercel with Clerk and Turso configuration still pending; Sites/Vinext references below describe earlier iterations.
+
+Completed iterations now include persistent queueing, team roles, evidence-based review and practice, offline evaluation tooling, guarded saves, revision comparison, scoped history, owner storage inventory, exact document deduplication and owner audit inspection. The latest [architecture and query iteration](ARCHITECTURE_QUERY_ITERATION.md) updates both diagrams and adds migration 0007 with measured local query-plan improvements.
+
+Next execution priorities:
+
+1. Complete credential-dependent hosted acceptance: sign-in, workspace isolation, save/reload, migration and staging restore.
+2. Verify and monitor worker dispatch with approved material and provider credentials before enabling its schedule.
+3. Establish browser regression CI, persistent-draft retention rules and bounded revision-history reads.
+4. Run independent domain/retrieval evaluations and address measured failures; agree on a buyer workflow before adding billing or native integrations.
+
+The owner supplies account access, permitted identities, approved anchors/material and pilot acceptance criteria. Engineering owns the implementation and verification steps described in [Owner actions](OWNER_ACTIONS.md).
+
+## Historical milestones
 
 ## Iteration A: measurable quality and safe failure
 
@@ -56,7 +73,7 @@ Exit criteria: reviewers complete the review-to-practice workflow; voice behavio
 
 Finish and verify each increment before broadening it. Preserve existing interfaces and UI primitives. Keep private source/access settings. New infrastructure, domain standards and measured results must be documented when they actually exist. Record credential or data dependencies without treating them as reasons to stop independent engineering work.
 
-## Latest verification
+## Historical verification snapshot
 
 Nested tracing: all 45 tests and the complete `npm run check` gate passed locally. Independent review found no blocking issues. No new schema migration or hosted deployment was performed. The next independent engineering priority is durable attempt processing; first specify admission, cancellation, uncertain provider completion and retry rules, then implement and exercise interruption recovery before deployment.
 

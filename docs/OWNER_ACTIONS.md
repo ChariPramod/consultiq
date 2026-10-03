@@ -11,7 +11,7 @@ The public site is deployed on Vercel. The authenticated workspace still needs t
 - [ ] Finish Clerk application and Turso account/database setup. Put the Clerk keys, database connection/token and your exact Clerk user ID in the ignored `.env.local` file or Vercel production settings. Do not paste secret values into chat or GitHub. Use the existing Vercel URL for initial testing.
 - [ ] Provide the permitted reviewer identities for the pilot allowlist. Workspace owners can then issue reviewer/viewer invitations; accepting an invitation does not bypass the deployment allowlist.
 
-Once credentials are available, engineering can apply all migrations through **0006**, redeploy with the configured environment, test authenticated isolation/save/reload, exercise backup restoration and verify the worker before enabling its schedule. You do not need to implement those steps yourself. [Storage/query rollout](STORAGE_QUERY_OPTIMIZATION.md#verification-and-rollout) records the migration and older-backup compatibility requirements.
+Once credentials are available, engineering can apply all migrations through **0007**, redeploy with the configured environment, test authenticated isolation/save/reload, exercise backup restoration and verify the worker before enabling its schedule. You do not need to implement those steps yourself. [Current storage/query rollout](ARCHITECTURE_QUERY_ITERATION.md#verification-and-rollout) records the migration and older-backup compatibility requirements.
 
 ## Required for a useful first review
 

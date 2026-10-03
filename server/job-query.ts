@@ -82,8 +82,8 @@ export async function queryJobs(
     values.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`);
   }
   if (cursor) {
-    where.push('(j.created_at<? OR (j.created_at=? AND j.id<?))');
-    values.push(cursor.created_at, cursor.created_at, cursor.id);
+    where.push('(j.created_at,j.id)<(?,?)');
+    values.push(cursor.created_at, cursor.id);
   }
   const rows = await repo
     .statement(

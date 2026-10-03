@@ -18,7 +18,7 @@ Run the benchmark from the repository root:
 npm run benchmark:queries
 ```
 
-It creates two disposable local SQLite databases, one with migrations through 0005 and one with the current migration history. It never loads `.env.local`, connects to a remote database, calls a model, or writes to an existing database. Temporary files are removed in `finally`.
+It creates two disposable local SQLite databases, one with migrations through 0005 and one through 0006. The command deliberately pins that comparison; later operational-query measurements are in [Architecture, query and audit updates](ARCHITECTURE_QUERY_ITERATION.md). It never loads `.env.local`, connects to a remote database, calls a model, or writes to an existing database. Temporary files are removed in `finally`.
 
 Both databases contain identical synthetic data: 2 workspaces, 1,600 consultations, 6,400 assessment revisions, 1,600 practice assignments, 1,600 jobs, 100 library documents and 500 chunks. Shared timestamps exercise deterministic ordering. The script captures actual SQL from consultation, practice, follow-up, latest-assessment and retrieval functions. Dispatcher discovery and the active-call predicate are measured directly. Each query has five warmups and 25 measured executions.
 
@@ -93,5 +93,5 @@ Clerk, Turso, model credentials and live hosted checks remain separate requireme
 
 - Keyword retrieval still scans candidate text within the selected workspace using substring checks and applies the existing ranking to at most 120 candidates. The new index improves ordering; it does not provide a full-text index, embeddings or better retrieval quality.
 - Title/coordinator substring searches, JSON score extraction and whole-workspace insights still require work proportional to matching/history size. Count and page reads are current reads, not one frozen export snapshot.
-- Recent jobs still use a status-priority expression for the dashboard, and large audit/revision histories remain retained. No speculative retention/deletion was introduced.
+- Migration 0007 and the [operational-query update](ARCHITECTURE_QUERY_ITERATION.md) now bound the dashboard job sort and add paginated owner audit inspection. Large audit/revision histories remain retained; no speculative retention/deletion was introduced.
 - Measure realistic hosted network latency, concurrent writes, worker throughput and source retrieval against independently judged examples before setting performance or quality commitments.

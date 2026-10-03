@@ -1,6 +1,6 @@
 # ConsultIQ architecture
 
-This document describes the implemented TypeScript application, including the current storage and query improvements. It is the canonical architecture reference; [IMPLEMENTATION.md](IMPLEMENTATION.md) maps the API and code boundaries. The diagrams are also available as editable Mermaid files: [overall architecture](diagrams/overall-architecture.mmd) and [query and response flow](diagrams/query-response.mmd). Portable rendered previews: [overall architecture SVG](diagrams/overall-architecture.svg) and [query/response SVG](diagrams/query-response.svg).
+This document describes the implemented TypeScript application, including revision comparison, draft recovery, owner audit history and the current storage/query changes. It is the canonical architecture reference; [IMPLEMENTATION.md](IMPLEMENTATION.md) maps the API and code boundaries. The diagrams are also available as editable Mermaid files: [overall architecture](diagrams/overall-architecture.mmd) and [query and response flow](diagrams/query-response.mmd). Portable rendered previews: [overall architecture SVG](diagrams/overall-architecture.svg) and [query/response SVG](diagrams/query-response.svg).
 
 The application targets official Next.js on Vercel, Clerk identity and Turso/libSQL storage. A deployed public page is not evidence that the authenticated workspace or worker has passed live acceptance. Clerk/Turso setup, migration application, provider credentials and authenticated hosted checks remain deployment gates. [Operations readiness](OPERATIONS_READINESS.md) records the checks and their limits.
 
@@ -11,24 +11,25 @@ The SVG previews are rendered with Mermaid CLI 12.0.0 and [the checked-in render
 ```mermaid
 flowchart TB
   accTitle: ConsultIQ overall architecture
-  accDescr: Browser workspace, authenticated Next.js API, workspace-scoped Turso storage, a separately dispatched analysis worker, model provider and isolated optional tracing.
+  accDescr: Browser review and revision comparison with draft recovery, an authenticated Next.js API with bounded queries and owner audit history, workspace-scoped Turso storage, separately dispatched analysis, and optional content-free tracing. Hosted credentials and acceptance remain deployment gates.
   subgraph Client[Browser]
     Public["Public landing page and product tour<br/>Labeled synthetic illustrations"]
-    UI["Authenticated workspace<br/>Review queue · team · practice · insights"]
+    UI["Authenticated workspace<br/>Review + revision comparison · team · practice<br/>Analysis history · owner audit + storage<br/>Pinned drafts · confirmed-write recovery"]
   end
 
   subgraph Vercel["Vercel · official Next.js · Node runtime"]
     Pages["App Router pages<br/>React · TypeScript · shared UI primitives"]
     API["Same-origin application API<br/>Verified identity · allowlist · workspace role"]
-    Domain["Domain services and scoped repositories<br/>Review revisions · library · team · learning"]
+    Reads["Scoped keyset read services<br/>Review · practice · analysis pages<br/>Owner audit + logical storage inventory<br/>Validated run telemetry"]
+    Domain["Guarded domain writes<br/>Append revisions · optimistic versions<br/>Atomic exact-source deduplication"]
     Queue["Durable analysis admission<br/>Idempotency key · pinned inputs · daily limit"]
     Endpoint["Internal worker endpoint<br/>Exact server-secret authentication"]
-    Worker["Worker orchestration<br/>Claim lease · recheck access · retrieve · validate"]
+    Worker["Worker orchestration<br/>Lease + access/input recheck<br/>Keyword retrieval · evidence validation"]
   end
 
   Clerk["Clerk<br/>Session identity"]
-  DB[("Turso / libSQL<br/>Workspace-scoped records and job queue")]
-  Scheduler["GitHub Actions dispatcher<br/>Configured five-minute schedule"]
+  DB[("Turso / libSQL<br/>Workspace-scoped records · jobs · audit<br/>Keyset + active-job indexes · source hashes")]
+  Scheduler["GitHub Actions dispatcher<br/>Opt-in five-minute schedule"]
   Claude["Anthropic model API<br/>Transcript + rubric or retrieved sources"]
   Traces["Optional LangSmith<br/>Content-free model and validation/save spans"]
   Ops["Operator commands<br/>Migrations · backup/restore · hosted checks"]
@@ -40,7 +41,9 @@ flowchart TB
   UI <-->|Sign-in and session| Clerk
   UI -->|Scoped reads and mutations| API
   API -->|Verified session| Clerk
-  API --> Domain
+  API -->|Read and filter| Reads
+  Reads <-->|Bounded pages and explicit fields| DB
+  API -->|Manual mutations| Domain
   Domain <--> DB
   API -->|AI requests| Queue
   Queue -->|Persist intent before HTTP 202| DB
@@ -58,7 +61,7 @@ flowchart TB
   classDef storage fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
   classDef operator fill:#f8fafc,stroke:#64748b,color:#334155
   class Public,UI client
-  class Pages,API,Domain,Queue,Endpoint,Worker runtime
+  class Pages,API,Reads,Domain,Queue,Endpoint,Worker runtime
   class Clerk,Claude,Traces external
   class DB storage
   class Scheduler,Ops,Evals,Fixtures operator
@@ -83,9 +86,9 @@ Clerk supplies identity; application code supplies workspace authorization. The 
 ```mermaid
 sequenceDiagram
   accTitle: ConsultIQ query and response flow
-  accDescr: Session and workspace authorization, ordinary queries, durable analysis admission, independent worker validation and atomic persistence, followed by client refresh.
+  accDescr: Session and workspace authorization, scoped paginated queries including owner audit history, guarded manual writes with confirmed-save recovery, durable analysis admission, independent worker validation and atomic persistence, followed by validated telemetry reads and draft-safe client refresh.
   autonumber
-  actor User as Workspace user
+  actor User as Browser workspace
   participant API as Next.js API
   participant DB as Turso / libSQL
   participant Dispatch as Scheduler / operator
@@ -105,11 +108,21 @@ sequenceDiagram
     API-->>User: 403, no business mutation
   end
 
-  alt Read or manual mutation
-    API->>DB: Scoped query or guarded transaction
-    DB-->>API: Summary, detail, or committed revision
-    API-->>User: JSON response, private, no-store
-    Note over API,DB: Stale revisions return 409, missing scoped records return 404
+  alt Read workspace data
+    API->>API: Validate filters, page limit and scope-bound cursor
+    API->>DB: Scoped summary, keyset page or selected record detail
+    Note over API,DB: Owner-only audit and storage reads, no transcript or provider payload in job history
+    DB-->>API: Explicit response fields, at most one extra row for paginated reads
+    API->>API: Validate saved run telemetry, malformed values become unavailable
+    API-->>User: JSON + next cursor when paginated, private, no-store
+    Note over User,API: Revision comparison uses saved detail, mixed-rubric score deltas are hidden
+  else Manual import, publication or assessment save
+    Note over User,API: Editor pins baseline and evidence when opened, in-flight submission is locked
+    API->>DB: Scoped guarded write + audit, append assessment revisions
+    DB-->>API: Committed record or conflict
+    API-->>User: Saved record, or 409 requiring reconciliation
+    Note over User,DB: Confirmed save survives a failed refresh, retry the read only
+    Note over User,API: Lost write response stays uncertain, inspect before deliberate resubmission
   else AI assessment or coaching request
     Note over User,API: Analysis POST includes a unique Idempotency-Key
     API->>DB: Preflight inputs, atomically persist queued intent + audit
@@ -131,7 +144,8 @@ sequenceDiagram
     alt Assessment
       Worker->>DB: Check active rubric, load pinned rubric and transcript
     else Coaching
-      Worker->>DB: Load transcript, retrieve approved scoped passages
+      Worker->>DB: Load transcript, keyword rank approved scoped passages
+      Note over Worker,DB: Up to 120 candidates, top five passages, no vector store
     end
     break Preflight rejected
       Worker->>DB: Fail job without a model call
@@ -159,18 +173,30 @@ sequenceDiagram
   end
 
   User->>API: Refresh or bounded visible-tab polling
-  API->>DB: Reauthorize workspace, read job state and selected detail
+  API->>DB: Reauthorize workspace, read job page / bootstrap and selected detail
   DB-->>API: Stored result or sanitized failure status
-  API-->>User: Updated review state, generated coaching requires human review
+  API->>API: Validate measurements and permission-aware cancellation controls
+  API-->>User: Stored review state, generated coaching requires human review
+  User->>User: Ignore superseded reads, preserve open draft and confirmed-save notice
 ```
 
 ### Request admission and ordinary queries
 
 `server/runtime.ts` verifies session admission before opening the database. `server/handler.ts` then resolves the selected workspace, applies owner/reviewer/viewer permissions, checks mutation origins and validates request bodies. Application responses use `Cache-Control: private, no-store`; a shared response cache cannot leak a workspace payload.
 
-The initial workspace response contains lightweight conversation/document summaries and recent job metadata. Full transcripts, assessment history and document text load when opened. Review queues, reviewer worklists, the practice inbox, eligible follow-up selection and analysis history use bounded server queries rather than filtering only the bootstrap list. Scope-bound keyset cursors preserve the selected filters; they do not bypass authorization or freeze a database snapshot.
+The initial workspace response contains lightweight conversation/document summaries and job metadata with active runs prioritized. Full transcripts, assessment history and document text load when opened. Review queues, reviewer worklists, the practice inbox, eligible follow-up selection, analysis history and owner audit history use bounded server queries rather than filtering only the bootstrap list. Scope-bound keyset cursors preserve the selected filters; they do not bypass authorization or freeze a database snapshot.
 
-The client pins an open assessment draft to its original revision, ignores superseded detail responses, and separates confirmed writes from failed refreshes. Revision comparison uses saved records and suppresses numeric differences across rubric versions. Malformed run measurements become unavailable values instead of blocking the workspace. See [review and operational recovery](REVIEW_OPERATIONS_ITERATION.md) for these boundaries.
+| Read path | Returned data | Resource and access boundary |
+| --- | --- | --- |
+| Workspace bootstrap | Up to 200 consultation summaries, up to 200 job summaries, approved-document summaries and current rubric | Active/recent job ID selection precedes the bounded final sort and measurement projection; transcript history is loaded separately |
+| Analysis history | Filtered job page, consultation title, validated measurements and `can_cancel` | Default 25/max 50 rows; workspace/filter-bound cursor; no transcript, generation input or request-key fields; cancellation still checks permission on the server |
+| Owner audit history | Event ID, action, entity ID, actor ID and timestamp | Default 25/max 50 rows; exact action filter and workspace/action-bound cursor; owner authorization on every request; no record-content joins |
+| Consultation detail | Transcript, saved assessment revisions and recent generated coaching | Workspace-scoped on demand; revision comparison runs against these saved assessments, not a new model request |
+| Owner storage inventory | Consistent row counts and logical UTF-8 text bytes by table/group | Scoped aggregate when requested; it scans stored values and is not a physical-storage or billing measurement |
+
+The client pins an open assessment draft to its original revision, retains its saved citations, ignores superseded detail responses, and separates confirmed writes from failed refreshes. Revision comparison uses saved records and suppresses numeric differences across rubric versions or unsupported scores. After a confirmed import, rubric publication or assessment save, a failed refresh offers a read retry without repeating the mutation. A lost write response remains uncertain and requires inspection before deliberate resubmission. These drafts live in memory and do not survive a browser reload. Malformed run measurements become unavailable values instead of blocking the workspace. See [review and operational recovery](REVIEW_OPERATIONS_ITERATION.md) for these boundaries.
+
+Workspace Settings exposes `GET /api/audit-events` to the owner alongside queue operations and storage. It pages metadata events without loading the referenced records, so deletion does not erase the recorded event and a missing actor is shown as “Not recorded.” This is an operational history of emitted application events, not a comprehensive compliance audit, a read-access log or a tamper-evident ledger. Refresh failures retain the current page with an error; changing the action filter does not relabel stale results as a new page.
 
 Manual assessment edits append revisions. A client supplies the assessment it edited; the save checks the latest revision atomically. A conflicting save returns 409 instead of overwriting another review. Assignment edits use their own version guards, and practice completion pins the reviewed baseline and follow-up assessments.
 
@@ -202,6 +228,8 @@ A worker HTTP 200 means the dispatch was handled: a claimed job can still have f
 | 503 | Missing authentication/storage/provider configuration or unavailable infrastructure | Complete configuration or restore the service; missing configuration fails closed |
 | Queued → failed/interrupted | Worker lease expired without a successful commit | Investigate the worker and provider outcome before deliberately requesting a new run |
 | Lost mutation response | The write may already have committed | Refresh and inspect saved state before resubmitting |
+| Confirmed mutation followed by failed refresh | The write is saved but the current read failed | Retain the saved acknowledgement and retry the read; do not repeat the import, publication or assessment save |
+| Malformed persisted run measurements | The job remains readable but its metrics are unavailable | Show unavailable metrics; do not infer zero duration/tokens or fail the whole workspace |
 
 Provider errors and other worker-time failures normally appear in stored job history after a 202 response; they are not retroactively returned on the admission request. A malformed enabled LangSmith endpoint fails before provider invocation. Trace delivery failures after analysis preserve the original result or error, use no raw error content and never trigger analysis retries. Retrieval and trace delivery are outside the saved analysis timing interval.
 
@@ -220,11 +248,13 @@ JSON is used for bounded transcript turns, rubric definitions, validated assessm
 The current storage/query improvements are intentionally incremental:
 
 - **Exact source deduplication:** new approved documents store a SHA-256 hash of the trimmed document body, unique within a workspace. A legacy exact-body check also covers existing documents without a hash. A duplicate produces a 409 without extra chunks or a successful-import audit. Existing documents are not deleted, rewritten or silently merged. Similar-but-different sources remain separate.
-- **Query-specific indexes:** migration `0006_gray_polaris.sql` adds or refines indexes for workspace keyset traversal, follow-up eligibility, retrieval candidates, practice listing and job dispatch/active-job checks. Latest-assessment lookups retain the existing call/created-time index. The reproducible query benchmark inspects index use against migrated SQLite. Indexes trade additional write/storage cost for supported read paths; these local measurements do not establish a hosted latency benchmark.
+- **Query-specific indexes:** migration `0006_gray_polaris.sql` supports workspace traversal, follow-up eligibility, retrieval candidates, practice listing and job dispatch. Migration `0007_sharp_menace.sql` replaces the earlier workspace/time job and audit indexes with workspace/time/ID indexes that match stable page ordering, and adds a partial index containing only queued/running jobs. It leaves records intact and avoids keeping redundant prefix indexes. Latest-assessment lookups retain their existing call/created-time index. Indexes add write/storage cost; local query plans are not a hosted latency benchmark.
+- **Bounded job bootstrap:** indexed active and recent terminal branches select at most 200 narrow job IDs in total before primary-key detail lookups, the final priority sort and telemetry projection. The active-first response remains capped at 200; the separate history endpoint exposes older runs. If active runs fill the response, the terminal branch has a zero limit. This removes the whole-history priority sort rather than hiding it behind a small response limit. Job and audit continuation queries compare the `(created_at, id)` tuple so their matching indexes can seek into later pages. Equal-time bootstrap jobs now use descending ID order to match analysis history; assessment/rubric revision ordering is unchanged.
+- **Metadata-only audit browsing:** owner audit pages read explicit columns directly from `audit_events`. Filtering and continuation stay in SQL, and a one-row lookahead determines whether another page exists without an all-history count or content joins. Events retain their IDs and actor metadata after a referenced consultation or source is deleted.
 - **Owner storage inspection:** `GET /api/storage` returns a consistent scoped aggregate of row counts and UTF-8 logical text bytes, split by data group/table. It returns neither record contents nor cross-workspace totals. This is an application payload estimate, not physical database allocation, index size, backups, replicas, provider billing or a quota.
 - **Whole-workspace follow-up candidates:** `GET /api/practice/:id/candidates` pages consultations whose latest assessment is human across the workspace, restricted to the assignment's coordinator, rubric and chronological requirements. Search no longer depends on the latest 200 bootstrap summaries. Completion revalidates current state before saving.
 
-These changes do not eliminate all large-workspace costs. Substring library search still scans scoped text candidates and ranks at most 120 candidates into five passages. Full assessment history loads on consultation detail. Counts and page reads can observe concurrent changes; source text and chunks intentionally coexist. Retention automation, physical-space reclamation and large hosted load tests remain future work.
+These changes do not eliminate all large-workspace costs. Optional status, kind, title or audit-action filters can still scan within scoped index ranges; not every filter combination has a dedicated index. Substring library search still scans scoped text candidates and ranks at most 120 candidates into five passages. Full assessment history loads on consultation detail. Storage inventories scan text values, and counts/page reads can observe concurrent changes. Source text and derived chunks intentionally coexist to preserve source inspection and stable citation IDs. Retention automation, physical-space reclamation and large hosted load tests remain future work. [The architecture/query iteration report](ARCHITECTURE_QUERY_ITERATION.md) records the new query-plan measurements, index tradeoffs and owner rollout work; [the earlier optimization report](STORAGE_QUERY_OPTIMIZATION.md) covers migration 0006.
 
 Deletion is explicit and owner-controlled: removing a consultation cascades its assessments, jobs and dependent workflow records. Removing a knowledge document removes its chunks and clears saved coaching content in that workspace to avoid retaining copied passages. Metadata-only audit records remain. No background retention deletion has been added.
 

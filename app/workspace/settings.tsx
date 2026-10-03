@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Operations } from './operations';
 import { StoragePanel } from './storage';
+import { AuditHistory } from './audit-history';
 import {
   ArrowRight,
   BookOpen,
@@ -884,6 +885,10 @@ export function WorkspaceSettings({
         <>
           <Operations />
           <StoragePanel />
+          <AuditHistory
+            key={data.workspace.id}
+            workspaceId={data.workspace.id}
+          />
         </>
       )}
       <section className="settings-boundary">

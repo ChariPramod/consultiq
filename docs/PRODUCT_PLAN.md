@@ -23,6 +23,7 @@ The product promise is reviewable coaching. It is not a claim that conversation 
 | Team access | Owner/reviewer/viewer membership, invitations and revocation implemented; pilot allowlist retained |
 | Background analysis | Persistent queue, separate worker, cancellation and lease fences implemented; worker deployment pending |
 | Analysis history | Full-workspace filtered pagination with validated measurements and role-aware cancellation |
+| Owner audit history | Paginated recorded-action metadata with exact action filters and explicit missing-actor handling |
 | Customer self-service and billing | Pending |
 | Audio, transcription, real patient data | Pending and outside current ingestion scope |
 | Offline evaluation infrastructure | Implemented; supplied references required, no validated domain benchmark |
@@ -70,3 +71,5 @@ The team/queue/evaluation/operations increment is detailed in [Product reliabili
 [Storage and query optimization](STORAGE_QUERY_OPTIMIZATION.md) adds migration 0006, duplicate-content prevention, an owner storage inventory and paginated follow-up discovery. The [architecture diagrams](ARCHITECTURE.md) describe the current implementation. Local synthetic query measurements do not establish hosted capacity or production latency.
 
 [Review and operational recovery](REVIEW_OPERATIONS_ITERATION.md) adds assessment comparisons, full analysis history, preservation of open drafts and extra evidence, confirmed-write recovery and malformed-measurement fallback. Persistent drafts across browser reloads and automated browser regressions remain follow-up engineering work.
+
+[Architecture, query and audit updates](ARCHITECTURE_QUERY_ITERATION.md) refresh both diagrams and add migration 0007 for bounded operational reads and owner audit inspection. Local query-plan evidence does not establish hosted performance or commercial readiness.

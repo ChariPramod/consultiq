@@ -1,8 +1,8 @@
 sequenceDiagram
   accTitle: ConsultIQ query and response flow
-  accDescr: Session and workspace authorization, ordinary queries, durable analysis admission, independent worker validation and atomic persistence, followed by client refresh.
+  accDescr: Session and workspace authorization, scoped paginated queries including owner audit history, guarded manual writes with confirmed-save recovery, durable analysis admission, independent worker validation and atomic persistence, followed by validated telemetry reads and draft-safe client refresh.
   autonumber
-  actor User as Workspace user
+  actor User as Browser workspace
   participant API as Next.js API
   participant DB as Turso / libSQL
   participant Dispatch as Scheduler / operator
@@ -22,11 +22,21 @@ sequenceDiagram
     API-->>User: 403, no business mutation
   end
 
-  alt Read or manual mutation
-    API->>DB: Scoped query or guarded transaction
-    DB-->>API: Summary, detail, or committed revision
-    API-->>User: JSON response, private, no-store
-    Note over API,DB: Stale revisions return 409, missing scoped records return 404
+  alt Read workspace data
+    API->>API: Validate filters, page limit and scope-bound cursor
+    API->>DB: Scoped summary, keyset page or selected record detail
+    Note over API,DB: Owner-only audit and storage reads, no transcript or provider payload in job history
+    DB-->>API: Explicit response fields, at most one extra row for paginated reads
+    API->>API: Validate saved run telemetry, malformed values become unavailable
+    API-->>User: JSON + next cursor when paginated, private, no-store
+    Note over User,API: Revision comparison uses saved detail, mixed-rubric score deltas are hidden
+  else Manual import, publication or assessment save
+    Note over User,API: Editor pins baseline and evidence when opened, in-flight submission is locked
+    API->>DB: Scoped guarded write + audit, append assessment revisions
+    DB-->>API: Committed record or conflict
+    API-->>User: Saved record, or 409 requiring reconciliation
+    Note over User,DB: Confirmed save survives a failed refresh, retry the read only
+    Note over User,API: Lost write response stays uncertain, inspect before deliberate resubmission
   else AI assessment or coaching request
     Note over User,API: Analysis POST includes a unique Idempotency-Key
     API->>DB: Preflight inputs, atomically persist queued intent + audit
@@ -48,7 +58,8 @@ sequenceDiagram
     alt Assessment
       Worker->>DB: Check active rubric, load pinned rubric and transcript
     else Coaching
-      Worker->>DB: Load transcript, retrieve approved scoped passages
+      Worker->>DB: Load transcript, keyword rank approved scoped passages
+      Note over Worker,DB: Up to 120 candidates, top five passages, no vector store
     end
     break Preflight rejected
       Worker->>DB: Fail job without a model call
@@ -76,6 +87,8 @@ sequenceDiagram
   end
 
   User->>API: Refresh or bounded visible-tab polling
-  API->>DB: Reauthorize workspace, read job state and selected detail
+  API->>DB: Reauthorize workspace, read job page / bootstrap and selected detail
   DB-->>API: Stored result or sanitized failure status
-  API-->>User: Updated review state, generated coaching requires human review
+  API->>API: Validate measurements and permission-aware cancellation controls
+  API-->>User: Stored review state, generated coaching requires human review
+  User->>User: Ignore superseded reads, preserve open draft and confirmed-save notice

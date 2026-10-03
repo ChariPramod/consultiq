@@ -1,4 +1,5 @@
 import { storageUsage } from './storage.ts';
+import { queryAuditEvents } from './audit-query.ts';
 import { queryJobs } from './job-query.ts';
 import { queryFollowupCandidates } from './followup-candidates.ts';
 import { workspaceInsights } from './insights.ts';
@@ -107,6 +108,15 @@ export async function handleApi(
       request.headers.get('x-workspace-id'),
     );
     authorize(role, method, path);
+    if (path === '/api/audit-events' && method === 'GET') {
+      if (role !== 'owner')
+        throw new AppError(
+          403,
+          'access_denied',
+          'Only the workspace owner may inspect audit history.',
+        );
+      return json(await queryAuditEvents(repo, url.searchParams));
+    }
     if (path === '/api/jobs' && method === 'GET')
       return json(await queryJobs(repo, url.searchParams, role));
     if (path === '/api/insights' && method === 'GET')

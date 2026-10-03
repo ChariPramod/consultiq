@@ -5,6 +5,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 export const workspaces = sqliteTable('workspaces', {
   id: text('id').primaryKey(),
   ownerId: text('owner_id').notNull().unique(),
@@ -153,7 +154,10 @@ export const jobs = sqliteTable(
     leaseUntil: text('lease_until'),
   },
   (t) => [
-    index('jobs_workspace_created').on(t.workspaceId, t.createdAt),
+    index('jobs_workspace_created_id').on(t.workspaceId, t.createdAt, t.id),
+    index('jobs_workspace_active_created_id')
+      .on(t.workspaceId, t.createdAt, t.id)
+      .where(sql`${t.status} IN ('queued','running')`),
     uniqueIndex('jobs_workspace_request').on(t.workspaceId, t.requestKey),
     index('jobs_status_created_id').on(t.status, t.createdAt, t.id),
     index('jobs_workspace_call_status').on(t.workspaceId, t.callId, t.status),
@@ -171,7 +175,9 @@ export const events = sqliteTable(
     entityId: text('entity_id').notNull(),
     createdAt: text('created_at').notNull(),
   },
-  (t) => [index('audit_workspace_created').on(t.workspaceId, t.createdAt)],
+  (t) => [
+    index('audit_workspace_created_id').on(t.workspaceId, t.createdAt, t.id),
+  ],
 );
 export const coachingReviews = sqliteTable(
   'coaching_reviews',

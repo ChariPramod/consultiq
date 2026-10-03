@@ -20,7 +20,7 @@ Ordinary queries return lightweight summaries or explicitly requested detail. Hu
 | `server/handler.ts` | Workspace/role routing, mutation-origin checks, request limits and endpoint dispatch |
 | `server/team.ts` | Workspace resolution, actor-bound invitations and membership revocation |
 | `server/repository.ts`, `server/database.ts` | Scoped persistence, evidence guards, transactional batches and foreign-key enforcement |
-| `server/consultation-query.ts`, `server/practice-inbox.ts`, `server/followup-candidates.ts`, `server/job-query.ts` | Bounded workspace queries and scope-bound keyset pagination |
+| `server/consultation-query.ts`, `server/practice-inbox.ts`, `server/followup-candidates.ts`, `server/job-query.ts`, `server/audit-query.ts` | Bounded workspace queries and scope-bound keyset pagination; audit metadata is owner-only |
 | `lib/assessment-comparison.ts`, `lib/assessment-draft.ts`, `lib/run-telemetry.ts` | Revision comparisons, citation-preserving drafts and validated measurement reads |
 | `server/review-tasks.ts`, `server/learning.ts` | Versioned reviewer assignments, coaching decisions and pinned practice completion |
 | `server/insights.ts`, `server/operations.ts`, `server/storage.ts` | Workspace aggregates, owner operations and logical storage inspection |
@@ -81,6 +81,7 @@ Application endpoints require verified session admission and workspace authoriza
 | DELETE | `/api/team/invitations/:id` | Owner revoke an invitation |
 | POST | `/api/jobs/:id/cancel` | Owner or requesting reviewer cancel active analysis |
 | GET | `/api/jobs` | Query scoped analysis history by status, type and consultation title |
+| GET | `/api/audit-events` | Owner inspect recorded workspace action metadata with action filters and bounded pagination |
 | GET | `/api/insights` | Read all-time workspace counts and rubric-separated aggregates |
 | GET | `/api/operations` | Owner inspect queue/failure/lease aggregates |
 | GET | `/api/storage` | Owner inspect scoped row counts and logical text bytes |
@@ -150,3 +151,7 @@ Successful AI persistence now commits the result, audit event and completed job 
 ## Review comparison, history and recovery
 
 `server/job-query.ts` provides role-aware, scoped analysis history with bounded pages and filter-bound cursors. `lib/run-telemetry.ts` validates measurement reads for this endpoint and workspace bootstrap; malformed or unknown versions become unavailable metrics. Assessment comparison consumes existing scoped revisions, suppressing cross-rubric or unscored deltas. The editor captures the original draft baseline and preserves additional citations. Confirmed imports, rubric publications and assessment saves remain successful when a later refresh fails. See [Review comparison and operational recovery](REVIEW_OPERATIONS_ITERATION.md) for limits and verification. No new migration is required.
+
+## Bounded operational queries and owner audit history
+
+The next query increment bounds dashboard job sorting and supports deterministic job/audit pagination with migration **0007**. Assessment and rubric ordering retain their existing append-order semantics. `server/audit-query.ts` returns explicit event metadata from the selected workspace; the handler enforces ownership on every page. Missing historical actor IDs remain unknown. This is an inspection view of recorded application events, not an external tamper-evident audit service. See [architecture, query and audit changes](ARCHITECTURE_QUERY_ITERATION.md) for measurements, rollout and remaining limits.

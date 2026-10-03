@@ -1,23 +1,24 @@
 flowchart TB
   accTitle: ConsultIQ overall architecture
-  accDescr: Browser workspace, authenticated Next.js API, workspace-scoped Turso storage, a separately dispatched analysis worker, model provider and isolated optional tracing.
+  accDescr: Browser review and revision comparison with draft recovery, an authenticated Next.js API with bounded queries and owner audit history, workspace-scoped Turso storage, separately dispatched analysis, and optional content-free tracing. Hosted credentials and acceptance remain deployment gates.
   subgraph Client[Browser]
     Public["Public landing page and product tour<br/>Labeled synthetic illustrations"]
-    UI["Authenticated workspace<br/>Review queue · team · practice · insights"]
+    UI["Authenticated workspace<br/>Review + revision comparison · team · practice<br/>Analysis history · owner audit + storage<br/>Pinned drafts · confirmed-write recovery"]
   end
 
   subgraph Vercel["Vercel · official Next.js · Node runtime"]
     Pages["App Router pages<br/>React · TypeScript · shared UI primitives"]
     API["Same-origin application API<br/>Verified identity · allowlist · workspace role"]
-    Domain["Domain services and scoped repositories<br/>Review revisions · library · team · learning"]
+    Reads["Scoped keyset read services<br/>Review · practice · analysis pages<br/>Owner audit + logical storage inventory<br/>Validated run telemetry"]
+    Domain["Guarded domain writes<br/>Append revisions · optimistic versions<br/>Atomic exact-source deduplication"]
     Queue["Durable analysis admission<br/>Idempotency key · pinned inputs · daily limit"]
     Endpoint["Internal worker endpoint<br/>Exact server-secret authentication"]
-    Worker["Worker orchestration<br/>Claim lease · recheck access · retrieve · validate"]
+    Worker["Worker orchestration<br/>Lease + access/input recheck<br/>Keyword retrieval · evidence validation"]
   end
 
   Clerk["Clerk<br/>Session identity"]
-  DB[("Turso / libSQL<br/>Workspace-scoped records and job queue")]
-  Scheduler["GitHub Actions dispatcher<br/>Configured five-minute schedule"]
+  DB[("Turso / libSQL<br/>Workspace-scoped records · jobs · audit<br/>Keyset + active-job indexes · source hashes")]
+  Scheduler["GitHub Actions dispatcher<br/>Opt-in five-minute schedule"]
   Claude["Anthropic model API<br/>Transcript + rubric or retrieved sources"]
   Traces["Optional LangSmith<br/>Content-free model and validation/save spans"]
   Ops["Operator commands<br/>Migrations · backup/restore · hosted checks"]
@@ -29,7 +30,9 @@ flowchart TB
   UI <-->|Sign-in and session| Clerk
   UI -->|Scoped reads and mutations| API
   API -->|Verified session| Clerk
-  API --> Domain
+  API -->|Read and filter| Reads
+  Reads <-->|Bounded pages and explicit fields| DB
+  API -->|Manual mutations| Domain
   Domain <--> DB
   API -->|AI requests| Queue
   Queue -->|Persist intent before HTTP 202| DB
@@ -47,7 +50,7 @@ flowchart TB
   classDef storage fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
   classDef operator fill:#f8fafc,stroke:#64748b,color:#334155
   class Public,UI client
-  class Pages,API,Domain,Queue,Endpoint,Worker runtime
+  class Pages,API,Reads,Domain,Queue,Endpoint,Worker runtime
   class Clerk,Claude,Traces external
   class DB storage
   class Scheduler,Ops,Evals,Fixtures operator

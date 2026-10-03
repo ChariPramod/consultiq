@@ -42,6 +42,7 @@ npm run doctor
 - Optional Claude analysis through a persistent queue, separate worker, cancellation, lease recovery and daily request limits.
 - Saved analysis timings and reported input/output tokens, including available usage on failures.
 - Full-workspace analysis history with filters, pagination and permission-aware cancellation.
+- Owner audit history with action filters, recorded actor identities and paginated metadata.
 - Approved document ingestion with duplicate-content prevention, keyword retrieval, and citation-validated RAG coaching.
 - Append-only coaching decisions, manual practice assignments and pinned human-reviewed follow-up comparisons.
 - Paginated follow-up search across the workspace and owner-only storage usage by area and table.
@@ -74,9 +75,11 @@ Use the public `/tour` walkthrough to explain the workflow and exercise the actu
 
 The [overall architecture and query/response diagrams](docs/ARCHITECTURE.md) describe the current Next.js, Clerk, Turso and background-worker paths, including failure handling. Editable Mermaid sources and rendered SVGs are included.
 
-[Storage and query optimization](docs/STORAGE_QUERY_OPTIMIZATION.md) documents the new indexes, atomic library deduplication, storage inventory, follow-up search and reproducible local query-plan measurements. Apply all pending migrations through **0006** before authenticated use. Existing documents, citation IDs and review history are preserved.
+[Storage and query optimization](docs/STORAGE_QUERY_OPTIMIZATION.md) documents the new indexes, atomic library deduplication, storage inventory, follow-up search and reproducible local query-plan measurements. That increment introduced migration **0006**; the latest release requirement is **0007**, described below. Existing documents, citation IDs and review history are preserved.
 
 [Review comparison and operational recovery](docs/REVIEW_OPERATIONS_ITERATION.md) adds comparison tools, paginated analysis history, citation-preserving drafts and recovery for confirmed writes followed by failed refreshes. Malformed measurement records no longer block the dashboard. No additional migration is required.
+
+[Architecture, query and audit updates](docs/ARCHITECTURE_QUERY_ITERATION.md) refresh both rendered diagrams, bound dashboard job sorting, improve history pagination, and add owner audit inspection. Apply all pending migrations through **0007** for this release. The document records local measurements and the storage cost of index changes.
 
 ## Pilot workflow additions
 

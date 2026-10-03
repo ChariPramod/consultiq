@@ -25,6 +25,8 @@
   "sequence": {
     "useMaxWidth": false,
     "wrap": true,
+    "width": 190,
+    "actorMargin": 70,
     "messageFontSize": 15,
     "noteFontSize": 14
   }

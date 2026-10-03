@@ -27,7 +27,7 @@ try {
     });
     for (const migration of phase === 'before'
       ? migrations.slice(0, boundary)
-      : migrations)
+      : migrations.slice(0, boundary + 1))
       for (const sql of migration.statements) await db.client.execute(sql);
     const stamp = '2026-09-22T10:00:00.000Z';
     const pending = [];
@@ -244,7 +244,7 @@ try {
           warmup_runs: 5,
           measured_runs: 25,
           before_migration: '0005',
-          after_migration: migrations.at(-1).name,
+          after_migration: migrations[boundary].name,
           library_hashes: 'Legacy nulls retained; no backfill.',
         },
         ...reports,

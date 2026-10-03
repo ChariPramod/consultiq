@@ -469,3 +469,83 @@ test('analysis history API authorizes every page and excludes job payloads', asy
   const refreshed = await (await request('user_owner', 'jobs')).json();
   assert.equal(refreshed.jobs[0].can_cancel, false);
 });
+
+test('audit history is owner-only, scoped on every page, and contains explicit metadata only', async (t) => {
+  const { repo, other, request } = await setup(t);
+  for (const { scope, prefix } of [
+    { scope: repo, prefix: 'own' },
+    { scope: other, prefix: 'foreign' },
+  ]) {
+    for (const [suffix, actor] of [
+      ['a', null],
+      ['b', 'user_recorded'],
+    ]) {
+      await scope
+        .statement(
+          'INSERT INTO audit_events(id,workspace_id,action,entity_id,actor_id,created_at) VALUES(?,?,?,?,?,?)',
+          `${prefix}-audit-${suffix}`,
+          scope.workspaceId,
+          'workspace_renamed',
+          scope.workspaceId,
+          actor,
+          '2026-10-01T10:00:00.000Z',
+        )
+        .run();
+    }
+  }
+  for (const user of [null, 'user_reviewer', 'user_viewer', 'user_other']) {
+    const response = await request(user, 'audit-events', {
+      headers: { 'X-Sites-User-Id': 'user_owner' },
+    });
+    assert.equal(response.status, user === null ? 401 : 403);
+    assert.doesNotMatch(await response.text(), /own-audit|foreign-audit/);
+  }
+  const first = await request(
+    'user_owner',
+    'audit-events?action=workspace_renamed&limit=1',
+  );
+  assert.equal(first.status, 200);
+  assert.match(first.headers.get('cache-control'), /private, no-store/);
+  const page = await first.json();
+  assert.equal(page.events[0].id, 'own-audit-b');
+  assert.equal(page.events[0].actor_id, 'user_recorded');
+  assert.deepEqual(Object.keys(page.events[0]).sort(), [
+    'action',
+    'actor_id',
+    'created_at',
+    'entity_id',
+    'id',
+  ]);
+  assert.equal(page.has_more, true);
+  assert.doesNotMatch(
+    JSON.stringify(page),
+    /Would Thursday work|Other workspace secret|token_hash|definitions|payload_json|foreign-audit/,
+  );
+  const nextPath = `audit-events?action=workspace_renamed&limit=1&cursor=${encodeURIComponent(page.next_cursor)}`;
+  assert.equal((await request('user_reviewer', nextPath)).status, 403);
+  const second = await (await request('user_owner', nextPath)).json();
+  assert.equal(second.events[0].id, 'own-audit-a');
+  assert.equal(second.events[0].actor_id, null);
+  assert.equal(second.has_more, false);
+  assert.equal(
+    (await request('user_other', nextPath, { workspace: other.workspaceId }))
+      .status,
+    422,
+  );
+  assert.equal(
+    (await request('user_owner', nextPath, { workspace: other.workspaceId }))
+      .status,
+    403,
+  );
+  for (const query of [
+    'limit=51',
+    'action=unknown_action',
+    'action=all&action=all',
+    'cursor=bad',
+  ]) {
+    assert.equal(
+      (await request('user_owner', `audit-events?${query}`)).status,
+      422,
+    );
+  }
+});

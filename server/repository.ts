@@ -194,7 +194,26 @@ export class Repository {
           this.workspaceId,
         ).all<KnowledgeDocumentSummary>(),
         this.statement(
-          "SELECT id,call_id,kind,status,error_code,created_at,telemetry_json FROM analysis_jobs WHERE workspace_id=? ORDER BY CASE WHEN status IN ('queued','running') THEN 0 ELSE 1 END,created_at DESC,rowid DESC LIMIT 200",
+          // Bound active/recent candidate IDs before reading any run metadata.
+          // The final sort and telemetry reads cover at most 200 selected rows.
+          // CROSS JOIN keeps these candidates first instead of scanning all jobs.
+          `WITH active AS (
+            SELECT id,created_at FROM analysis_jobs
+            WHERE workspace_id=? AND status IN ('queued','running')
+            ORDER BY created_at DESC,id DESC LIMIT 200
+          ), recent AS (
+            SELECT id,created_at FROM analysis_jobs
+            WHERE workspace_id=? AND status NOT IN ('queued','running')
+            ORDER BY created_at DESC,id DESC LIMIT (200-(SELECT COUNT(*) FROM active))
+          ), selected AS (
+            SELECT id,created_at,0 AS priority FROM active
+            UNION ALL SELECT id,created_at,1 AS priority FROM recent
+          )
+          SELECT j.id,j.call_id,j.kind,j.status,j.error_code,j.created_at,j.telemetry_json
+          FROM selected s CROSS JOIN analysis_jobs j ON j.id=s.id AND j.workspace_id=?
+          ORDER BY s.priority,s.created_at DESC,s.id DESC`,
+          this.workspaceId,
+          this.workspaceId,
           this.workspaceId,
         ).all<
           Omit<WorkspaceData['jobs'][number], 'telemetry'> & {
