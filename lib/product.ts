@@ -47,6 +47,13 @@ export type CallRecord = {
   turns: Turn[];
   latest: SavedAssessment | null;
 };
+/** Metadata needed by activity labels and the bounded follow-up selector. */
+export type WorkspaceCallSummary = Omit<CallRecord, 'turns' | 'latest'> & {
+  latest: Pick<
+    SavedAssessment,
+    'id' | 'kind' | 'rubric_id' | 'created_at'
+  > | null;
+};
 export type ConsultationSummary = Omit<CallRecord, 'turns' | 'latest'> & {
   turn_count: number;
   latest:
@@ -75,6 +82,10 @@ export type KnowledgeDocument = {
   body: string;
   created_at: string;
 };
+export type KnowledgeDocumentSummary = Omit<KnowledgeDocument, 'body'> & {
+  preview: string;
+  characters: number;
+};
 export type RunTelemetry = {
   schema_version: 1;
   total_ms: number;
@@ -86,10 +97,10 @@ export type RunTelemetry = {
 export type WorkspaceData = {
   workspace: { id: string; name: string };
   access: { role: 'owner' | 'reviewer' | 'viewer'; user_id: string };
-  calls: CallRecord[];
+  calls: WorkspaceCallSummary[];
   total: number;
   rubric: Rubric | null;
-  documents: KnowledgeDocument[];
+  documents: KnowledgeDocumentSummary[];
   configuration: {
     scoring: boolean;
     tracing: boolean;

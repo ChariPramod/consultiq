@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Operations } from './operations';
 import {
   ArrowRight,
@@ -264,8 +264,14 @@ export function Knowledge({
   reload: () => Promise<void>;
 }) {
   const [addOpen, setAddOpen] = useState(false);
-  const [selected, setSelected] = useState<KnowledgeDocument | null>(null);
-  const [deleting, setDeleting] = useState<KnowledgeDocument | null>(null);
+  const [selected, setSelected] = useState<Pick<
+    KnowledgeDocument,
+    'id' | 'title'
+  > | null>(null);
+  const [deleting, setDeleting] = useState<Pick<
+    KnowledgeDocument,
+    'id' | 'title'
+  > | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<
     | { chunk_id: string; document_id: string; title: string; body: string }[]
@@ -273,6 +279,46 @@ export function Knowledge({
   >(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [documentRevision, setDocumentRevision] = useState(0);
+  const [documentResult, setDocumentResult] = useState<{
+    key: string;
+    document: KnowledgeDocument | null;
+    error: string;
+  } | null>(null);
+  const selectedId = selected?.id ?? null;
+  const documentKey = JSON.stringify([selectedId, documentRevision]);
+  const documentView =
+    documentResult?.key === documentKey ? documentResult : null;
+  function openDocument(document: Pick<KnowledgeDocument, 'id' | 'title'>) {
+    setSelected({ id: document.id, title: document.title });
+    setDocumentRevision((value) => value + 1);
+  }
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    void api<KnowledgeDocument>(
+      `library/${encodeURIComponent(selectedId)}`,
+    ).then(
+      (document) => {
+        if (active)
+          setDocumentResult({ key: documentKey, document, error: '' });
+      },
+      (error) => {
+        if (active)
+          setDocumentResult({
+            key: documentKey,
+            document: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'This document could not be loaded.',
+          });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [selectedId, documentKey]);
   return (
     <>
       <div className="knowledge-toolbar">
@@ -349,10 +395,10 @@ export function Knowledge({
                 <button
                   className="text-button"
                   onClick={() =>
-                    setSelected(
-                      data.documents.find((d) => d.id === result.document_id) ??
-                        null,
-                    )
+                    openDocument({
+                      id: result.document_id,
+                      title: result.title,
+                    })
                   }
                 >
                   Open document <ArrowRight size={14} />
@@ -380,15 +426,15 @@ export function Knowledge({
               </div>
               <h2>{doc.title}</h2>
               <p>
-                {doc.body.slice(0, 170)}
-                {doc.body.length > 170 ? '…' : ''}
+                {doc.preview}
+                {doc.characters > 170 ? '…' : ''}
               </p>
               <div className="document-footer">
                 <span>{dateLabel(doc.created_at)}</span>
                 <div>
                   <button
                     className="text-button"
-                    onClick={() => setSelected(doc)}
+                    onClick={() => openDocument(doc)}
                   >
                     Read <ArrowRight size={14} />
                   </button>
@@ -436,10 +482,24 @@ export function Knowledge({
       >
         <SheetContent className="document-sheet">
           <SheetHeader>
-            <SheetTitle>{selected?.title}</SheetTitle>
+            <SheetTitle>{selected?.title ?? 'Source document'}</SheetTitle>
             <SheetDescription>Approved source document</SheetDescription>
           </SheetHeader>
-          <div className="document-body">{selected?.body}</div>
+          <div className="document-body">
+            {selected && !documentView && <output>Loading document…</output>}
+            {documentView?.error && (
+              <div role="alert" className="space-y-3 text-sm text-amber-900">
+                <p>{documentView.error}</p>
+                <button
+                  className="secondary-button"
+                  onClick={() => setDocumentRevision((value) => value + 1)}
+                >
+                  Retry document
+                </button>
+              </div>
+            )}
+            {documentView?.document?.body}
+          </div>
         </SheetContent>
       </Sheet>
       <ConfirmDelete

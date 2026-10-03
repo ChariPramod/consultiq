@@ -251,3 +251,65 @@ export const invitations = sqliteTable(
     uniqueIndex('invitations_workspace_user').on(t.workspaceId, t.inviteeId),
   ],
 );
+
+export const reviewTasks = sqliteTable(
+  'review_tasks',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    callId: text('call_id')
+      .notNull()
+      .references(() => calls.id, { onDelete: 'cascade' }),
+    assigneeId: text('assignee_id').notNull(),
+    dueDate: text('due_date'),
+    status: text('status').notNull(),
+    version: integer('version').notNull(),
+    completionAssessmentId: text('completion_assessment_id').references(
+      () => assessments.id,
+      { onDelete: 'cascade' },
+    ),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('review_tasks_workspace_call').on(t.workspaceId, t.callId),
+    index('review_tasks_workspace_updated').on(
+      t.workspaceId,
+      t.updatedAt,
+      t.id,
+    ),
+    index('review_tasks_workspace_assignee').on(
+      t.workspaceId,
+      t.assigneeId,
+      t.status,
+    ),
+  ],
+);
+export const reviewTaskEvents = sqliteTable(
+  'review_task_events',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => reviewTasks.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    actorId: text('actor_id').notNull(),
+    assigneeId: text('assignee_id').notNull(),
+    dueDate: text('due_date'),
+    status: text('status').notNull(),
+    completionAssessmentId: text('completion_assessment_id'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('review_task_events_version').on(
+      t.workspaceId,
+      t.taskId,
+      t.version,
+    ),
+  ],
+);

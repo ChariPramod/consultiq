@@ -1,3 +1,6 @@
+import { workspaceInsights } from './insights.ts';
+import { queryPracticeInbox } from './practice-inbox.ts';
+import { ReviewTasks, listReviewTasks } from './review-tasks.ts';
 import { queryConsultations } from './consultation-query.ts';
 import { exportConsultation } from './exports.ts';
 import { operations } from './operations.ts';
@@ -101,6 +104,21 @@ export async function handleApi(
       request.headers.get('x-workspace-id'),
     );
     authorize(role, method, path);
+    if (path === '/api/insights' && method === 'GET')
+      return json(await workspaceInsights(repo));
+    if (path === '/api/practice' && method === 'GET')
+      return json(await queryPracticeInbox(repo, url.searchParams));
+    if (path === '/api/review-tasks' && method === 'GET')
+      return json(await listReviewTasks(repo, url.searchParams));
+    const taskMatch = path.match(
+      /^\/api\/consultations\/([^/]+)\/review-task$/,
+    );
+    if (taskMatch) {
+      const tasks = new ReviewTasks(repo);
+      if (method === 'GET') return json(await tasks.read(taskMatch[1]));
+      if (method === 'PATCH')
+        return json(await tasks.save(taskMatch[1], await body(request)));
+    }
     if (path === '/api/operations' && method === 'GET') {
       if (role !== 'owner')
         throw new AppError(
@@ -196,6 +214,7 @@ export async function handleApi(
         201,
       );
     const doc = path.match(/^\/api\/library\/([^/]+)$/);
+    if (doc && method === 'GET') return json(await repo.document(doc[1]));
     if (doc && method === 'DELETE')
       return json(await repo.deleteDocument(doc[1]));
     const call = path.match(

@@ -34,6 +34,8 @@ import { Progress } from '@/components/ui/progress';
 import { api } from '@/lib/api';
 import { LearningWorkspace } from './learning';
 import { ReviewExport } from './review-export';
+import { TranscriptReader } from './transcript-reader';
+import { ReviewTaskPanel } from './review-task';
 import {
   DIMENSIONS,
   OUTCOME_LABELS,
@@ -55,8 +57,10 @@ export default function Review({
   onBack,
   onDeleted,
   onConfigure,
+  initialTab = 'transcript',
 }: {
   callId: string;
+  initialTab?: 'transcript' | 'practice' | 'assessment';
   data: WorkspaceData;
   onChanged: () => Promise<void>;
   onBack: () => void;
@@ -67,7 +71,7 @@ export default function Review({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [tab, setTab] = useState('transcript');
+  const [tab, setTab] = useState<string>(initialTab);
   const [highlight, setHighlight] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -164,6 +168,7 @@ export default function Review({
           <Trash2 size={15} /> Delete consultation
         </button>
       </div>
+      <ReviewTaskPanel key={callId} callId={callId} access={data.access} />
       <ReviewExport key={callId} callId={callId} />
       <section className="product-panel consultation-header">
         <div className="consultation-title-row">
@@ -313,50 +318,7 @@ export default function Review({
           </TabsTrigger>
         </TabsList>
         <TabsContent value="transcript">
-          <section className="product-panel transcript-record">
-            <div className="product-panel-heading">
-              <div>
-                <h2>Original transcript</h2>
-                <p>
-                  Speaker labels and timestamps are preserved from your import.
-                </p>
-              </div>
-              <span className="product-status">Read only</span>
-            </div>
-            <div className="source-turns">
-              {call.turns.map((turn, i) => (
-                <article
-                  id={`source-turn-${i}`}
-                  key={i}
-                  className={
-                    highlight === i ? 'source-turn highlighted' : 'source-turn'
-                  }
-                >
-                  <span
-                    className={
-                      turn.role === 'Coordinator'
-                        ? 'speaker-avatar'
-                        : 'speaker-avatar patient'
-                    }
-                  >
-                    {turn.role === 'Coordinator' ? 'TC' : 'P'}
-                  </span>
-                  <div>
-                    <div className="source-turn-meta">
-                      <strong>{turn.role}</strong>
-                      <span>{turn.time || `Turn ${i + 1}`}</span>
-                      {highlight === i && (
-                        <span className="product-status approved">
-                          Cited evidence
-                        </span>
-                      )}
-                    </div>
-                    <p>{turn.text}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+          <TranscriptReader turns={call.turns} citedTurn={highlight} />
         </TabsContent>
         <TabsContent value="assessment">
           {assessment ? (

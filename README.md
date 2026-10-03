@@ -63,6 +63,10 @@ The runtime now targets official Next.js on Vercel, with Clerk authentication an
 
 Use the public `/tour` walkthrough to explain the workflow and exercise the actual quote validator against clearly labeled synthetic content. It makes no AI calls and saves no records. See [the presentation guide](docs/PRESENTATION_GUIDE.md) for a five-minute script, technical talking points and the remaining live-workflow checks.
 
+## Team workflow
+
+[Reviewer assignments, practice inbox, whole-workspace insights and transcript tools](docs/TEAM_WORKFLOW_ITERATION.md) are implemented. Apply migration 0005 before authenticated use of this release.
+
 ## Pilot workflow additions
 
 [Batch CSV import, the paginated review queue, evidence exports and calendar handoff](docs/PILOT_WORKFLOW_SPRINT.md) are implemented. These support a training-team pilot; native CRM/calendar synchronization and commercial readiness remain unverified.

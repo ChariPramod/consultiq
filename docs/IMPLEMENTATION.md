@@ -114,3 +114,7 @@ Successful AI persistence now commits the result, audit event and completed job 
 ## Pilot workflow endpoints
 
 `server/consultation-query.ts` provides workspace-scoped keyset pagination with latest-assessment filters; `server/exports.ts` generates bounded, explicit-field CSV/JSON handoffs. Browser batch CSV import uses existing authenticated create requests with no automatic retry. `lib/calendar.ts` produces content-minimal calendar files without sending messages or connecting calendar accounts. See [pilot workflow scope and limits](PILOT_WORKFLOW_SPRINT.md).
+
+## Team workflow and lightweight workspace bootstrap
+
+`server/review-tasks.ts` owns versioned reviewer assignments and immutable change history. `server/practice-inbox.ts` reads pinned practice summaries; `server/insights.ts` computes all-time, workspace-scoped aggregates without mixed-rubric means. Bootstrap now returns consultation and document summaries; `/api/library/:id` loads full scoped source text on demand. New schema is migration 0005. See [team workflow and limitations](TEAM_WORKFLOW_ITERATION.md).

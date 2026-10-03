@@ -36,7 +36,7 @@ The original plan proposed a separate Python service and Postgres. The applicati
 2. Complete live provider and tracing verification using owner credentials. Add evaluated fixtures, structured feedback, and release comparisons tied to prompt, rubric, and model versions.
 3. Verify implemented team membership, invitations, role enforcement and offboarding in the hosted environment. Extend pilot admission to customer self-service only after policy is agreed.
 4. Deploy and monitor the implemented persistent queue worker. Verify cancellation, duplicate dispatch and lease interruption with the live provider. Automatic paid retries remain deliberately disabled; add external alerts and measured throughput capacity.
-5. Consultation pagination and filters are implemented. Add whole-workspace aggregated overview/coordinator queries; those screens still summarize at most 200 loaded records. Queue CSV exports reflect the displayed page.
+5. Consultation pagination, workspace insights and coordinator aggregates are implemented. Follow-up selection still uses the most recent 200 lightweight call summaries; extend candidate search before larger pilots. Queue CSV exports reflect the displayed page.
 6. Establish backup and restore procedures, retention automation, incident response, accessibility and browser regression checks, and load testing.
 
 ## Commercial release
@@ -60,3 +60,5 @@ The active implementation sequence and completion evidence are tracked in [Itera
 The team/queue/evaluation/operations increment is detailed in [Product reliability](PRODUCT_RELIABILITY.md); implementation is not a claim of completed live acceptance.
 
 [The pilot workflow sprint](PILOT_WORKFLOW_SPRINT.md) adds bulk CSV import, full-workspace consultation search, portable evidence exports and calendar-file downloads. Native customer-app integrations require a buyer use case and credentials.
+
+[The team workflow iteration](TEAM_WORKFLOW_ITERATION.md) adds reviewer ownership, UTC deadlines, versioned handoffs, the practice inbox, all-time aggregate insights and transcript search/copy. Apply migration 0005; live hosted verification remains credential-dependent.

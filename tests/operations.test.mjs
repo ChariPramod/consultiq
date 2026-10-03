@@ -185,3 +185,49 @@ test('backup refuses unscoped schema additions until operator policy is defined'
   await source.execute('CREATE TABLE unexpected_global (id TEXT)');
   await assert.rejects(backupWorkspace(source, 'one'), /Unscoped table/);
 });
+
+test('review ownership and immutable task events survive scoped backup and restore', async (t) => {
+  const source = await db(t),
+    target = await db(t);
+  await seed(source, 'tasks');
+  await source.execute({
+    sql: 'INSERT INTO review_tasks(id,workspace_id,call_id,assignee_id,due_date,status,version,completion_assessment_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    args: [
+      'task-one',
+      'tasks',
+      'call_tasks',
+      'user_tasks',
+      '2026-10-10',
+      'open',
+      1,
+      null,
+      '2026-10-02',
+      '2026-10-02',
+    ],
+  });
+  await source.execute({
+    sql: 'INSERT INTO review_task_events(id,workspace_id,task_id,version,actor_id,assignee_id,due_date,status,completion_assessment_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    args: [
+      'event-one',
+      'tasks',
+      'task-one',
+      1,
+      'user_tasks',
+      'user_tasks',
+      '2026-10-10',
+      'open',
+      null,
+      '2026-10-02',
+    ],
+  });
+  const snapshot = await backupWorkspace(source, 'tasks');
+  await restoreWorkspace(target, snapshot);
+  assert.deepEqual(
+    (await backupWorkspace(target, 'tasks')).payload.tables,
+    snapshot.payload.tables,
+  );
+  assert.equal(
+    (await target.execute('PRAGMA foreign_key_check')).rows.length,
+    0,
+  );
+});

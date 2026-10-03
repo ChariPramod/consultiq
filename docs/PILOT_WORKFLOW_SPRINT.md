@@ -14,7 +14,7 @@ The parser handles quoted commas, escaped quotes, CRLF and multiline fields. Inv
 
 Consultations now searches the entire authenticated workspace using server-side filters for title/coordinator text, exact coordinator, outcome and latest review type. The UI loads 25 rows at a time; the API allows at most 50. Rows contain summary fields and turn counts, not complete transcripts or assessment evidence. Unreviewed means no assessment exists. AI means the latest assessment is AI-authored, not that a reviewer has approved it.
 
-A stable creation-time/ID cursor avoids offset shifts from newer inserts. Cursors are bound to workspace and filters and confer no authorization. Count and page reads are separate; concurrent changes to reviews/outcomes can change totals and membership. UI errors offer a first-page reload. Exports from this table contain only the displayed page. Overview/coordinator/pattern views still summarize the most recent 200 calls; they are not whole-workspace analytics.
+A stable creation-time/ID cursor avoids offset shifts from newer inserts. Cursors are bound to workspace and filters and confer no authorization. Count and page reads are separate; concurrent changes to reviews/outcomes can change totals and membership. UI errors offer a first-page reload. Exports from this table contain only the displayed page. The later [team workflow iteration](TEAM_WORKFLOW_ITERATION.md) replaces the recent-record analytics with whole-workspace insights. Follow-up candidate selection still uses the most recent 200 summaries.
 
 ### Portable review handoff
 

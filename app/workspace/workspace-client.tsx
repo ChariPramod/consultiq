@@ -7,11 +7,9 @@ import {
   ArrowRight,
   AudioLines,
   BookOpen,
-  ChartNoAxesCombined,
   Check,
   ChevronRight,
   ClipboardCheck,
-  FileCheck2,
   LayoutDashboard,
   Layers3,
   Plus,
@@ -36,10 +34,9 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
 import { api, ApiError, selectWorkspace, selectedWorkspace } from '@/lib/api';
-import { DIMENSIONS, type WorkspaceData, type CallRecord } from '@/lib/product';
-import { CallTable, Empty, TranscriptDialog } from './components';
+import type { WorkspaceData } from '@/lib/product';
+import { TranscriptDialog } from './components';
 import Review from './review';
 import { Knowledge, RubricEditor, WorkspaceSettings } from './settings';
 import './product.css';
@@ -47,24 +44,27 @@ import { AnalysisActivity } from './activity';
 import { Team } from './team';
 import { ConsultationQueue } from './consultation-queue';
 import { BulkImportDialog } from './bulk-import';
+import { Insights } from './insights';
+import { PracticeInbox } from './practice-inbox';
+import { ReviewWorklist } from './review-worklist';
 type View =
   | 'team'
   | 'activity'
   | 'overview'
   | 'consultations'
-  | 'coordinators'
-  | 'patterns'
+  | 'assignments'
+  | 'practice'
   | 'knowledge'
   | 'rubric'
   | 'settings';
 const navigation = [
-  { id: 'activity', label: 'Analysis activity', icon: ClipboardCheck },
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'overview', label: 'Workspace insights', icon: LayoutDashboard },
+  { id: 'assignments', label: 'Assigned reviews', icon: ClipboardCheck },
+  { id: 'practice', label: 'Practice inbox', icon: BookOpen },
   { id: 'consultations', label: 'Consultations', icon: AudioLines },
-  { id: 'coordinators', label: 'Coordinators', icon: Users },
-  { id: 'patterns', label: 'Patterns', icon: ChartNoAxesCombined },
   { id: 'knowledge', label: 'Knowledge library', icon: BookOpen },
   { id: 'rubric', label: 'Review rubric', icon: Layers3 },
+  { id: 'activity', label: 'Analysis activity', icon: ClipboardCheck },
   { id: 'team', label: 'Team access', icon: Users },
   { id: 'settings', label: 'Workspace settings', icon: Settings2 },
 ] as const;
@@ -105,6 +105,7 @@ function Navigation({
             >
               <SidebarMenuButton
                 isActive={view === id}
+                aria-current={view === id ? 'page' : undefined}
                 className="product-nav-item"
                 onClick={() => {
                   onNavigate(id);
@@ -159,7 +160,7 @@ export default function Workspace() {
   const [importOpen, setImportOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [queueVersion, setQueueVersion] = useState(0);
-  const [coordinator, setCoordinator] = useState('all');
+  const [coordinator, setCoordinator] = useState('');
   const reload = useCallback(async () => {
     try {
       const result = await api<WorkspaceData>('workspace');
@@ -242,10 +243,16 @@ export default function Workspace() {
       clearTimeout(timer);
     };
   }, [pending, reload]);
-  const navigate = (next: View, callId: string | null = null) => {
-    setCoordinator('all');
+  const navigate = (
+    next: View,
+    callId: string | null = null,
+    tab?: 'practice' | 'assessment',
+  ) => {
+    setCoordinator('');
     const url = new URL(location.href);
     url.searchParams.set('view', next);
+    if (tab) url.searchParams.set('tab', tab);
+    else url.searchParams.delete('tab');
     if (callId) url.searchParams.set('call', callId);
     else url.searchParams.delete('call');
     history.pushState({}, '', url);
@@ -377,10 +384,10 @@ export default function Workspace() {
                           ? 'Review conversations, track assessments, and identify the next coaching action.'
                           : view === 'consultations'
                             ? 'Your consultation records and their assessment history.'
-                            : view === 'coordinators'
-                              ? 'Compare supported assessments across your saved consultations.'
-                              : view === 'patterns'
-                                ? 'Explore the behaviors recorded in your reviewed conversations.'
+                            : view === 'assignments'
+                              ? 'Clear ownership, due dates, and human-reviewed completion.'
+                              : view === 'practice'
+                                ? 'Follow through on practice across every conversation in your workspace.'
                                 : view === 'knowledge'
                                   ? 'Approved guidance for grounded consultation coaching.'
                                   : view === 'rubric'
@@ -392,12 +399,9 @@ export default function Workspace() {
                 </div>
                 {!selected &&
                   data.access.role !== 'viewer' &&
-                  [
-                    'overview',
-                    'consultations',
-                    'coordinators',
-                    'patterns',
-                  ].includes(view) && (
+                  ['overview', 'consultations', 'assignments'].includes(
+                    view,
+                  ) && (
                     <button
                       className="primary-button"
                       onClick={() => setImportOpen(true)}
@@ -408,7 +412,14 @@ export default function Workspace() {
               </div>
               {selected ? (
                 <Review
-                  key={`${data.workspace.id}:${selected}`}
+                  key={`${data.workspace.id}:${selected}:${params.get('tab')}`}
+                  initialTab={
+                    params.get('tab') === 'practice'
+                      ? 'practice'
+                      : params.get('tab') === 'assessment'
+                        ? 'assessment'
+                        : 'transcript'
+                  }
                   callId={selected}
                   data={data}
                   onChanged={reload}
@@ -436,6 +447,10 @@ export default function Workspace() {
                         if (data.access.role !== 'viewer') setImportOpen(true);
                       }}
                       navigate={navigate}
+                      onOpenCoordinator={(name) => {
+                        navigate('consultations');
+                        setCoordinator(name);
+                      }}
                     />
                   )}
                   {view === 'consultations' && (
@@ -448,16 +463,18 @@ export default function Workspace() {
                       onBulkImport={() => setBulkOpen(true)}
                     />
                   )}
-                  {view === 'coordinators' && (
-                    <Coordinators
-                      calls={data.calls}
-                      onOpen={(name) => {
-                        navigate('consultations');
-                        setCoordinator(name);
-                      }}
+                  {view === 'practice' && (
+                    <PracticeInbox
+                      onOpen={(id) => navigate('consultations', id, 'practice')}
                     />
                   )}
-                  {view === 'patterns' && <Patterns calls={data.calls} />}
+                  {view === 'assignments' && (
+                    <ReviewWorklist
+                      onOpen={(id) =>
+                        navigate('consultations', id, 'assessment')
+                      }
+                    />
+                  )}
                   {view === 'knowledge' && (
                     <Knowledge data={data} reload={reload} />
                   )}
@@ -518,100 +535,49 @@ function Overview({
   data,
   onImport,
   navigate,
+  onOpenCoordinator,
 }: {
   data: WorkspaceData;
   onImport: () => void;
   navigate: (view: View, callId?: string) => void;
+  onOpenCoordinator: (name: string) => void;
 }) {
-  const complete = data.calls.filter(
-    (c) => c.latest?.content.supported_count === 8,
-  );
-  const unreviewed = data.calls.filter((c) => !c.latest);
-  const supported = complete.length
-    ? complete.reduce((sum, c) => sum + c.latest!.content.average!, 0) /
-      complete.length
-    : null;
   return (
-    <>
-      <section className="product-metrics">
-        {[
-          {
-            label: 'Consultations',
-            value: data.total,
-            detail: 'Saved in your workspace',
-            icon: AudioLines,
-          },
-          {
-            label: 'Awaiting review',
-            value: unreviewed.length,
-            detail:
-              data.total > data.calls.length
-                ? 'Among the most recent 200 records'
-                : 'No assessment recorded',
-            icon: ClipboardCheck,
-          },
-          {
-            label: 'Complete assessments',
-            value: complete.length,
-            detail: 'Evidence for every dimension',
-            icon: FileCheck2,
-          },
-          {
-            label: 'Average supported score',
-            value: supported?.toFixed(1) ?? 'Not available',
-            detail: 'Complete assessments only',
-            icon: ChartNoAxesCombined,
-          },
-        ].map(({ label, value, detail, icon: Icon }) => (
-          <article key={label}>
-            <div>
-              <span>{label}</span>
-              <Icon size={18} />
-            </div>
-            <strong
-              className={
-                typeof value === 'string' && value.length > 5
-                  ? 'metric-text'
-                  : ''
-              }
-            >
-              {value}
-            </strong>
-            <p>{detail}</p>
-          </article>
-        ))}
-      </section>
-      {(!data.rubric || !data.calls.length || !data.documents.length) && (
+    <div className="space-y-6">
+      {(!data.rubric || !data.total || !data.documents.length) && (
         <section className="setup-panel">
           <div>
-            <span className="product-eyebrow">BUILD YOUR REVIEW PRACTICE</span>
-            <h2>A clear standard for every conversation.</h2>
-            <p>Prepare the material and criteria your assessments will use.</p>
+            <span className="product-eyebrow">YOUR FIRST REVIEW SESSION</span>
+            <h2>Build a shared review standard.</h2>
+            <p>
+              Manual reviews work without a model account. Coaching uses your
+              approved reference material.
+            </p>
           </div>
           <div className="setup-checklist">
             {[
               {
-                label: 'Publish your review rubric',
+                label: 'Publish your approved rubric',
                 done: !!data.rubric,
+                enabled: data.access.role === 'owner',
                 action: () => navigate('rubric'),
               },
               {
-                label: 'Import your first transcript',
-                done: !!data.calls.length,
+                label: 'Import a role-play transcript',
+                done: !!data.total,
+                enabled: data.access.role !== 'viewer',
                 action: onImport,
               },
               {
                 label: 'Add approved coaching guidance',
                 done: !!data.documents.length,
+                enabled: data.access.role === 'owner',
                 action: () => navigate('knowledge'),
               },
             ].map((item) => (
               <button
                 key={item.label}
-                disabled={
-                  data.access.role === 'viewer' &&
-                  item.label === 'Import your first transcript'
-                }
+                disabled={!item.enabled}
                 onClick={item.action}
               >
                 <span className={item.done ? 'done' : ''}>
@@ -624,164 +590,12 @@ function Overview({
           </div>
         </section>
       )}
-      <section className="product-panel">
-        <div className="product-panel-heading">
-          <div>
-            <h2>Recent consultations</h2>
-            <p>Open a conversation to review the evidence.</p>
-          </div>
-          <button
-            className="text-button"
-            onClick={() => navigate('consultations')}
-          >
-            View all <ArrowRight size={16} />
-          </button>
-        </div>
-        {data.calls.length ? (
-          <CallTable
-            calls={data.calls.slice(0, 6)}
-            onOpen={(id) => navigate('consultations', id)}
-          />
-        ) : (
-          <Empty
-            icon={AudioLines}
-            title="Begin with a conversation"
-            description="Import a synthetic or role-play transcript. It will stay in your workspace, ready for review."
-            action={
-              <button
-                className="primary-button"
-                disabled={data.access.role === 'viewer'}
-                onClick={onImport}
-              >
-                <Plus size={17} /> Import transcript
-              </button>
-            }
-          />
-        )}
-      </section>
-    </>
-  );
-}
-function Coordinators({
-  calls,
-  onOpen,
-}: {
-  calls: CallRecord[];
-  onOpen: (name: string) => void;
-}) {
-  const names = [...new Set(calls.map((c) => c.coordinator))].sort();
-  if (!names.length)
-    return (
-      <section className="product-panel">
-        <Empty
-          icon={Users}
-          title="Coordinator profiles appear with your consultations"
-          description="Import a transcript with a coordinator name to begin tracking their reviewed conversations."
-        />
-      </section>
-    );
-  return (
-    <div className="product-coordinators">
-      {names.map((name) => {
-        const own = calls.filter((c) => c.coordinator === name);
-        const reviewed = own.filter((c) => c.latest);
-        return (
-          <article className="product-panel coordinator-profile" key={name}>
-            <div className="coordinator-profile-heading">
-              <span className="coordinator-monogram">
-                {name
-                  .split(' ')
-                  .map((n) => n[0])
-                  .slice(0, 2)
-                  .join('')}
-              </span>
-              <div>
-                <h2>{name}</h2>
-                <p>
-                  {own.length} consultations · {reviewed.length} reviewed
-                </p>
-              </div>
-            </div>
-            <div className="product-dimension-bars">
-              {DIMENSIONS.map((d, i) => {
-                const scores = reviewed
-                  .map((c) => c.latest!.content.dimensions[i].score)
-                  .filter((s): s is number => s !== null);
-                const average = scores.length
-                  ? scores.reduce((a, b) => a + b, 0) / scores.length
-                  : null;
-                return (
-                  <div key={d}>
-                    <span>{d}</span>
-                    <div>
-                      <Progress
-                        value={(average ?? 0) * 20}
-                        aria-label={`${d}: ${average?.toFixed(1) ?? 'not assessed'}`}
-                      />
-                      <strong>{average?.toFixed(1) ?? 'N/A'}</strong>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <button className="text-button" onClick={() => onOpen(name)}>
-              Review consultations <ArrowRight size={15} />
-            </button>
-          </article>
-        );
-      })}
+      <Insights
+        onOpenCoordinator={onOpenCoordinator}
+        onOpenQueue={() => navigate('consultations')}
+        onImport={data.access.role === 'viewer' ? undefined : onImport}
+      />
     </div>
-  );
-}
-function Patterns({ calls }: { calls: CallRecord[] }) {
-  const reviewed = calls.filter((c) => c.latest);
-  if (!reviewed.length)
-    return (
-      <section className="product-panel">
-        <Empty
-          icon={ChartNoAxesCombined}
-          title="Patterns start with reviewed conversations"
-          description="Record assessments with supporting evidence to compare rubric dimensions across your consultations."
-        />
-      </section>
-    );
-  return (
-    <section className="product-panel pattern-report">
-      <div className="product-panel-heading">
-        <div>
-          <h2>Rubric dimension overview</h2>
-          <p>
-            Supported scores across {reviewed.length} reviewed consultations.
-          </p>
-        </div>
-      </div>
-      <div className="product-pattern-bars">
-        {DIMENSIONS.map((d, i) => {
-          const values = reviewed
-            .map((c) => c.latest!.content.dimensions[i].score)
-            .filter((s): s is number => s !== null);
-          const mean = values.length
-            ? values.reduce((a, b) => a + b, 0) / values.length
-            : null;
-          return (
-            <div key={d}>
-              <span>{d}</span>
-              <Progress
-                value={(mean ?? 0) * 20}
-                aria-label={`${d}: ${mean?.toFixed(1) ?? 'unavailable'}`}
-              />
-              <strong>{mean?.toFixed(1) ?? 'N/A'}</strong>
-              <small>{values.length} supported</small>
-            </div>
-          );
-        })}
-      </div>
-      <p className="product-notice">
-        <ShieldCheck size={17} />
-        These are descriptive averages of your assessments. They do not
-        establish causation or predict patient outcomes.
-      </p>
-    </section>
   );
 }
 

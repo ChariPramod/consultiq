@@ -7,6 +7,8 @@ import {
   type SavedAssessment,
   type Rubric,
   type KnowledgeDocument,
+  type KnowledgeDocumentSummary,
+  type WorkspaceCallSummary,
   type WorkspaceData,
   type Coaching,
   type Citation,
@@ -156,18 +158,24 @@ export class Repository {
           this.workspaceId,
         ).first<{ id: string; name: string }>(),
         this.statement(
-          'SELECT * FROM consultations WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC LIMIT 200',
+          `SELECT c.id,c.title,c.coordinator,c.source,c.outcome,c.recorded_at,c.created_at,
+            a.id AS assessment_id,a.kind AS assessment_kind,a.rubric_id AS assessment_rubric_id,
+            a.created_at AS assessment_created_at
+          FROM consultations c LEFT JOIN assessments a ON a.workspace_id=c.workspace_id AND a.call_id=c.id
+            AND a.id=(SELECT b.id FROM assessments b WHERE b.workspace_id=c.workspace_id AND b.call_id=c.id
+              ORDER BY b.created_at DESC,b.rowid DESC LIMIT 1)
+          WHERE c.workspace_id=? ORDER BY c.created_at DESC,c.rowid DESC LIMIT 200`,
           this.workspaceId,
-        ).all(),
+        ).all<Record<string, string | null>>(),
         this.statement(
           'SELECT COUNT(*) AS count FROM consultations WHERE workspace_id=?',
           this.workspaceId,
         ).first<{ count: number }>(),
         this.rubric(),
         this.statement(
-          'SELECT id,title,body,created_at FROM knowledge_documents WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC',
+          'SELECT id,title,substr(body,1,170) AS preview,length(body) AS characters,created_at FROM knowledge_documents WHERE workspace_id=? ORDER BY created_at DESC,rowid DESC',
           this.workspaceId,
-        ).all<KnowledgeDocument>(),
+        ).all<KnowledgeDocumentSummary>(),
         this.statement(
           "SELECT id,call_id,kind,status,error_code,created_at,telemetry_json FROM analysis_jobs WHERE workspace_id=? ORDER BY CASE WHEN status IN ('queued','running') THEN 0 ELSE 1 END,created_at DESC,rowid DESC LIMIT 200",
           this.workspaceId,
@@ -178,23 +186,28 @@ export class Repository {
         >(),
       ],
     );
-    const assessmentRows = await this.statement(
-      'SELECT a.* FROM assessments a WHERE a.workspace_id=? AND a.id=(SELECT b.id FROM assessments b WHERE b.call_id=a.call_id AND b.workspace_id=a.workspace_id ORDER BY b.created_at DESC,b.rowid DESC LIMIT 1)',
-      this.workspaceId,
-    ).all();
-    const latest = new Map(
-      assessmentRows.results.map((row) => [
-        String(row.call_id),
-        readAssessment(row),
-      ]),
-    );
     return {
       workspace: workspace!,
-      calls: rows.results.map((row) => ({
-        ...row,
-        turns: JSON.parse(String(row.turns)),
-        latest: latest.get(String(row.id)) ?? null,
-      })) as CallRecord[],
+      calls: rows.results.map((row) => {
+        const {
+          assessment_id,
+          assessment_kind,
+          assessment_rubric_id,
+          assessment_created_at,
+          ...call
+        } = row;
+        return {
+          ...call,
+          latest: assessment_id
+            ? {
+                id: String(assessment_id),
+                kind: assessment_kind,
+                rubric_id: String(assessment_rubric_id),
+                created_at: String(assessment_created_at),
+              }
+            : null,
+        } as WorkspaceCallSummary;
+      }),
       total: total?.count ?? 0,
       rubric,
       documents: documents.results,
@@ -462,6 +475,15 @@ export class Repository {
       this.event('knowledge_approved', documentId),
     ]);
     return { id: documentId, title, body };
+  }
+  async document(documentId: string): Promise<KnowledgeDocument> {
+    const document = await this.statement(
+      'SELECT id,title,body,created_at FROM knowledge_documents WHERE id=? AND workspace_id=?',
+      documentId,
+      this.workspaceId,
+    ).first<KnowledgeDocument>();
+    if (!document) throw new AppError(404, 'not_found', 'Document not found.');
+    return document;
   }
   async deleteDocument(documentId: string) {
     const doc = await this.statement(

@@ -84,7 +84,7 @@
   font-size: 0.875rem !important;
   color: #a4c0bc;
 }
-.product-nav-item[data-active='true'] {
+.product-nav-item[data-active] {
   box-shadow: inset 2px 0 0 #a5cab7;
   background: #2c4b4e !important;
   color: #f8fcf8 !important;
@@ -2277,3 +2277,7 @@
 }
 
 @keyframes shine { 0%,100% { background-position:0% 0%; } 50% { background-position:100% 100%; } }
+
+@media (max-width: 640px) {
+  .product-topbar .private-indicator { display: none; }
+}

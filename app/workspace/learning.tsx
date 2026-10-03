@@ -16,7 +16,12 @@ import {
   type CoachingReview,
   type PracticeAssignment,
 } from '@/lib/learning';
-import { DIMENSIONS, type Coaching, type CallRecord } from '@/lib/product';
+import {
+  DIMENSIONS,
+  type Coaching,
+  type CallRecord,
+  type WorkspaceCallSummary,
+} from '@/lib/product';
 const blank: LearningData = { reviews: [], assignments: [] };
 export function LearningWorkspace({
   call,
@@ -28,7 +33,7 @@ export function LearningWorkspace({
 }: {
   call: CallRecord;
   coaching: Coaching[];
-  calls: CallRecord[];
+  calls: WorkspaceCallSummary[];
   onHumanReview: () => void;
   onRefresh: () => Promise<void>;
   readOnly?: boolean;
@@ -468,7 +473,7 @@ function PracticeCard({
   onSaved,
 }: {
   assignment: PracticeAssignment;
-  calls: CallRecord[];
+  calls: WorkspaceCallSummary[];
   call: CallRecord;
   reviews: CoachingReview[];
   readOnly: boolean;

@@ -40,9 +40,7 @@ export function ConsultationQueue({
   const [q, setQ] = useState('');
   const [outcome, setOutcome] = useState('all');
   const [review, setReview] = useState('all');
-  const [person, setPerson] = useState(
-    coordinator === 'all' ? '' : coordinator,
-  );
+  const [person, setPerson] = useState(coordinator);
   const [personFilter, setPersonFilter] = useState(person);
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [result, setResult] = useState<{
