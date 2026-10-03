@@ -47,6 +47,14 @@ export type CallRecord = {
   turns: Turn[];
   latest: SavedAssessment | null;
 };
+export type ConsultationSummary = Omit<CallRecord, 'turns' | 'latest'> & {
+  turn_count: number;
+  latest:
+    | (Pick<SavedAssessment, 'id' | 'kind'> & {
+        content: Pick<AssessmentContent, 'average' | 'supported_count'>;
+      })
+    | null;
+};
 export type Citation = {
   chunk_id: string;
   document_id: string;
@@ -155,11 +163,18 @@ export function validateRubric(value: unknown): RubricDefinition[] {
     };
   });
 }
-export function csv(calls: CallRecord[]) {
+export function csv(
+  calls: Array<
+    Pick<
+      ConsultationSummary,
+      'title' | 'coordinator' | 'source' | 'recorded_at' | 'outcome' | 'latest'
+    >
+  >,
+) {
   const cell = (v: string | number | null | undefined) =>
     '"' +
     String(v ?? '')
-      .replace(/^[=+@\-\t\r]/, "'$&")
+      .replace(/^[\s\uFEFF]*[=+@-]|^[\t\r\n]/u, "'$&")
       .replaceAll('"', '""') +
     '"';
   return [

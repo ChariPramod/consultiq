@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { SignInLink } from '../sign-in-link';
 import {
-  ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
   AudioLines,
@@ -39,19 +38,15 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { api, ApiError, selectWorkspace, selectedWorkspace } from '@/lib/api';
-import {
-  DIMENSIONS,
-  OUTCOME_LABELS,
-  csv,
-  type WorkspaceData,
-  type CallRecord,
-} from '@/lib/product';
-import { CallTable, Empty, SearchField, TranscriptDialog } from './components';
+import { DIMENSIONS, type WorkspaceData, type CallRecord } from '@/lib/product';
+import { CallTable, Empty, TranscriptDialog } from './components';
 import Review from './review';
 import { Knowledge, RubricEditor, WorkspaceSettings } from './settings';
 import './product.css';
 import { AnalysisActivity } from './activity';
 import { Team } from './team';
+import { ConsultationQueue } from './consultation-queue';
+import { BulkImportDialog } from './bulk-import';
 type View =
   | 'team'
   | 'activity'
@@ -162,9 +157,9 @@ export default function Workspace() {
     : 'overview';
   const selected = params.get('call');
   const [importOpen, setImportOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [queueVersion, setQueueVersion] = useState(0);
   const [coordinator, setCoordinator] = useState('all');
-  const [outcome, setOutcome] = useState('all');
   const reload = useCallback(async () => {
     try {
       const result = await api<WorkspaceData>('workspace');
@@ -248,9 +243,7 @@ export default function Workspace() {
     };
   }, [pending, reload]);
   const navigate = (next: View, callId: string | null = null) => {
-    setQuery('');
     setCoordinator('all');
-    setOutcome('all');
     const url = new URL(location.href);
     url.searchParams.set('view', next);
     if (callId) url.searchParams.set('call', callId);
@@ -259,14 +252,6 @@ export default function Workspace() {
     dispatchEvent(new Event('consultiq:navigate'));
     window.scrollTo({ top: 0 });
   };
-  const calls = (data?.calls ?? []).filter(
-    (c) =>
-      (coordinator === 'all' || c.coordinator === coordinator) &&
-      (outcome === 'all' || c.outcome === outcome) &&
-      `${c.title} ${c.coordinator}`
-        .toLowerCase()
-        .includes(query.trim().toLowerCase()),
-  );
   const title = selected
     ? 'Consultation review'
     : navigation.find((n) => n.id === view)!.label;
@@ -454,110 +439,14 @@ export default function Workspace() {
                     />
                   )}
                   {view === 'consultations' && (
-                    <>
-                      <div className="product-filters">
-                        <SearchField value={query} onChange={setQuery} />
-                        <NativeSelect
-                          aria-label="Filter by coordinator"
-                          value={coordinator}
-                          onChange={(e) => setCoordinator(e.target.value)}
-                        >
-                          <NativeSelectOption value="all">
-                            All coordinators
-                          </NativeSelectOption>
-                          {[...new Set(data.calls.map((c) => c.coordinator))]
-                            .sort()
-                            .map((name) => (
-                              <NativeSelectOption key={name}>
-                                {name}
-                              </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
-                        <NativeSelect
-                          aria-label="Filter by outcome"
-                          value={outcome}
-                          onChange={(e) => setOutcome(e.target.value)}
-                        >
-                          <NativeSelectOption value="all">
-                            All outcomes
-                          </NativeSelectOption>
-                          {Object.entries(OUTCOME_LABELS).map(
-                            ([value, label]) => (
-                              <NativeSelectOption key={value} value={value}>
-                                {label}
-                              </NativeSelectOption>
-                            ),
-                          )}
-                        </NativeSelect>
-                        <button
-                          className="secondary-button export-button"
-                          disabled={!calls.length}
-                          onClick={() => {
-                            const url = URL.createObjectURL(
-                              new Blob([csv(calls)], {
-                                type: 'text/csv;charset=utf-8',
-                              }),
-                            );
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = 'consultiq-consultations.csv';
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          }}
-                        >
-                          <ArrowDownToLine size={16} /> Export
-                        </button>
-                      </div>
-                      <section className="product-panel">
-                        {calls.length ? (
-                          <CallTable
-                            calls={calls}
-                            onOpen={(id) => navigate('consultations', id)}
-                          />
-                        ) : (
-                          <Empty
-                            title={
-                              data.calls.length
-                                ? 'No matching consultations'
-                                : 'Your consultation history starts here'
-                            }
-                            description={
-                              data.calls.length
-                                ? 'Try different filters or search terms.'
-                                : 'Import a speaker-labeled transcript to create a permanent record and begin a review.'
-                            }
-                            action={
-                              <button
-                                className="primary-button"
-                                disabled={
-                                  !data.calls.length &&
-                                  data.access.role === 'viewer'
-                                }
-                                onClick={() =>
-                                  data.calls.length
-                                    ? (setQuery(''),
-                                      setCoordinator('all'),
-                                      setOutcome('all'))
-                                    : setImportOpen(true)
-                                }
-                              >
-                                {data.calls.length
-                                  ? 'Clear filters'
-                                  : 'Import transcript'}
-                                <ArrowRight size={16} />
-                              </button>
-                            }
-                          />
-                        )}
-                      </section>
-                      <p className="list-caption">
-                        Showing {calls.length} of {data.total} consultations
-                        {data.total > 200
-                          ? ' · Most recent records loaded'
-                          : ''}
-                        .
-                      </p>
-                    </>
+                    <ConsultationQueue
+                      key={`${queueVersion}:${coordinator}`}
+                      coordinator={coordinator}
+                      readOnly={data.access.role === 'viewer'}
+                      onOpen={(id) => navigate('consultations', id)}
+                      onImport={() => setImportOpen(true)}
+                      onBulkImport={() => setBulkOpen(true)}
+                    />
                   )}
                   {view === 'coordinators' && (
                     <Coordinators
@@ -586,6 +475,19 @@ export default function Workspace() {
                     <WorkspaceSettings data={data} reload={reload} />
                   )}
                 </>
+              )}
+              {data.access.role !== 'viewer' && (
+                <BulkImportDialog
+                  open={bulkOpen}
+                  onOpenChange={setBulkOpen}
+                  onImported={async () => {
+                    try {
+                      await reload();
+                    } finally {
+                      setQueueVersion((v) => v + 1);
+                    }
+                  }}
+                />
               )}
               <TranscriptDialog
                 open={importOpen}
@@ -642,7 +544,10 @@ function Overview({
           {
             label: 'Awaiting review',
             value: unreviewed.length,
-            detail: 'No assessment recorded',
+            detail:
+              data.total > data.calls.length
+                ? 'Among the most recent 200 records'
+                : 'No assessment recorded',
             icon: ClipboardCheck,
           },
           {

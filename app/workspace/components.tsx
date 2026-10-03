@@ -45,6 +45,7 @@ import { api } from '@/lib/api';
 import {
   OUTCOME_LABELS,
   type CallRecord,
+  type ConsultationSummary,
   type KnowledgeDocument,
 } from '@/lib/product';
 export const dateLabel = (date: string) =>
@@ -91,7 +92,7 @@ export function Outcome({ outcome }: { outcome: CallRecord['outcome'] }) {
     </span>
   );
 }
-export function Score({ call }: { call: CallRecord }) {
+export function Score({ call }: { call: Pick<ConsultationSummary, 'latest'> }) {
   if (!call.latest)
     return <span className="product-status awaiting">Awaiting review</span>;
   return (
@@ -110,7 +111,7 @@ export function CallTable({
   calls,
   onOpen,
 }: {
-  calls: CallRecord[];
+  calls: (CallRecord | ConsultationSummary)[];
   onOpen: (id: string) => void;
 }) {
   return (
@@ -142,7 +143,8 @@ export function CallTable({
                   <strong>{call.title}</strong>
                   <small>
                     {call.source === 'roleplay' ? 'Role-play' : 'Synthetic'} ·{' '}
-                    {call.turns.length} transcript turns
+                    {'turn_count' in call ? call.turn_count : call.turns.length}{' '}
+                    transcript turns
                   </small>
                 </span>
               </button>

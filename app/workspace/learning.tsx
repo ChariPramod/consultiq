@@ -9,6 +9,7 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import { api } from '@/lib/api';
+import { PracticeCalendar } from './practice-calendar';
 import {
   comparison,
   type LearningData,
@@ -514,6 +515,9 @@ function PracticeCard({
         </span>
       </div>
       <p className="whitespace-pre-wrap">{assignment.instruction}</p>
+      {!assignment.completion && (
+        <PracticeCalendar assignmentId={assignment.id} />
+      )}
       <p className="text-xs text-slate-500">
         Baseline {assignment.baseline_id} · Rubric{' '}
         {assignment.baseline.rubric_id} ·{' '}

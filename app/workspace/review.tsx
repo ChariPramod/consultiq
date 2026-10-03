@@ -33,6 +33,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { api } from '@/lib/api';
 import { LearningWorkspace } from './learning';
+import { ReviewExport } from './review-export';
 import {
   DIMENSIONS,
   OUTCOME_LABELS,
@@ -163,6 +164,7 @@ export default function Review({
           <Trash2 size={15} /> Delete consultation
         </button>
       </div>
+      <ReviewExport key={callId} callId={callId} />
       <section className="product-panel consultation-header">
         <div className="consultation-title-row">
           <div>

@@ -110,3 +110,7 @@ Successful AI persistence now commits the result, audit event and completed job 
 ## Team, queue and operations boundaries
 
 `server/team.ts` resolves membership and enforces roles. `server/queue.ts` handles idempotent admission, atomic claims, cancellation and lease recovery. `server/worker-auth.ts` protects remote dispatch; the worker never accepts a caller-selected workspace. `server/operations.ts` returns owner-only workspace aggregates. Retrieval uses shared `lib/retrieval.ts` ranking. New persistence is migrations 0003 and 0004. Read [PRODUCT_RELIABILITY.md](PRODUCT_RELIABILITY.md) for deployment requirements and limits.
+
+## Pilot workflow endpoints
+
+`server/consultation-query.ts` provides workspace-scoped keyset pagination with latest-assessment filters; `server/exports.ts` generates bounded, explicit-field CSV/JSON handoffs. Browser batch CSV import uses existing authenticated create requests with no automatic retry. `lib/calendar.ts` produces content-minimal calendar files without sending messages or connecting calendar accounts. See [pilot workflow scope and limits](PILOT_WORKFLOW_SPRINT.md).

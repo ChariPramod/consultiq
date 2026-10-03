@@ -163,3 +163,20 @@ test('queued and cancelled analysis runs can be inspected independently', () => 
     ['x'],
   );
 });
+
+test('queue CSV neutralizes formulas hidden behind whitespace or BOM', async () => {
+  const { csv } = await import('../lib/product.ts');
+  for (const title of ['  =1+1', '\uFEFF@SUM(1)', '\n=1', '\ttext', '-1+2']) {
+    const result = csv([
+      {
+        title,
+        coordinator: 'Trainer',
+        source: 'synthetic',
+        recorded_at: '2026-10-02',
+        outcome: 'unknown',
+        latest: null,
+      },
+    ]);
+    assert.ok(result.split('\r\n')[1].startsWith('"\''), title);
+  }
+});

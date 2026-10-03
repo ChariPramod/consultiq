@@ -1,3 +1,5 @@
+import { queryConsultations } from './consultation-query.ts';
+import { exportConsultation } from './exports.ts';
 import { operations } from './operations.ts';
 import {
   workspaceAccess,
@@ -132,6 +134,17 @@ export async function handleApi(
       const data = (await body(request)) as { name?: unknown };
       return json(await repo.renameWorkspace(data?.name));
     }
+    if (path === '/api/consultations' && method === 'GET')
+      return json(await queryConsultations(repo, url.searchParams));
+    const exportMatch = path.match(/^\/api\/consultations\/([^/]+)\/export$/);
+    if (exportMatch && method === 'GET')
+      return json(
+        await exportConsultation(
+          repo,
+          exportMatch[1],
+          url.searchParams.get('format'),
+        ),
+      );
     if (path === '/api/consultations' && method === 'POST')
       return json(await repo.createCall(await body(request)), 201);
     if (path === '/api/rubrics' && method === 'GET')
